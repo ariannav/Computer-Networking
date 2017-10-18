@@ -11,4 +11,22 @@ Data structure:
 
 What about getting the file back?
 
-*/ 
+*/
+
+#ifndef AWGET_H
+#define AWGET_H
+
+#include <stdlib.h>
+
+struct ss{
+  char[50] ip;
+  char[6] port;
+};
+
+struct ss_packet{
+  uint8_t num_steps;
+  char url[500];
+  struct ss steps[256];
+}
+
+#endif

@@ -1,19 +1,165 @@
-/*Reader
+/*Reader*/
 
-awget <URL> [-c chainfile]
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <time.h>
+#include <sys/socket.h>
+#include <arpa/inet.h>
+#include <netdb.h>
+#include "awget.h"
+
+/*awget <URL> [-c chainfile]
             or local chaingang.txt
             or error and exit.
+*/
+int main(int argc, char* argv[]){
+  char* url;
+  char* cgang = "./chaingang.txt";
 
-Open file.
-Pick random ss using rand() and seed.
-Connect to ss.
-Send URL and chainlist, remove entry that was selected.
+  if(argc==2){
+    url = arg[1];
+    //Grab chaingang.txt
+    ss_start(url, cgang);
+  }
+  else if(argc==3){
+    url = arg[1];
+    cgang = arg[2];
+    //Do something with chaingang and URL
+    ss_start(url, cgang);
+  }
+  else{
+    //Usage error.
+    printf("Usage: $awget <URL> [-c chainfile]\n");
+  }
 
-Wait for data to arrive.
+}
 
-Saves data to local file, name same as URL.
-Process name.
-            www.cs.colostate.edu/~cs457/p2.html => p2.html
-            no name: index.html from URL
+ss_start(char* url, char* cgang){
+  printf("Request: %s\n", url);
 
-Close connection. */
+  FILE *fptr;
+  char line[50];
+  //Open cgang file.
+  if((fptr = fopen(cgang,"r")) == NULL){
+    printf("Problem opening file %s . Exiting program.\n", cgang);
+    exit(1);
+  }
+
+  //Get number of stepping stones.
+  fgets(line, 50, (FILE*)fp);
+  int num_ss = atoi(line);
+
+  struct ss_packet packet;
+  packet.num_steps = num_ss;
+
+
+  //Populate & Print Chainlist
+  printf("Chainlist is: \n")
+  for(int i = 0; i< num_ss; i++){
+    fscanf(fp, "%s", line);
+    strcpy(packet.steps[i].ip, line);
+    fscanf(fp, "%s", line);
+    strncpy(packet.steps[i].port, line, 6);
+    printf("<%s, %s>\n", packet.steps[i].ip, packet.steps[i].port);
+  }
+
+  //Pick a random ss
+  srand(time(NULL));
+  int r = rand() % num_ss;
+  char ip[50]; strcpy(ip, packet.steps[i].ip);
+  char port[6]; strcpy(port, packet.steps[i].port);
+  printf("Next SS is <%s, %s>\n", ip, port);
+
+  //Connect to ss as client
+  client_connect(ip, port, packet);
+
+}
+
+void client_connect(char* ip, char* port, struct ss_packet packet){
+  struct sockarrd_in server;
+
+  int sockit = socket(AF_INET, SOCK_STREAM, 0);
+  if sockit == -1){
+    printf("Could not create socket! Exiting program.\n");
+    exit(1);
+  }
+
+  server.sin_addr.s_addr = inet_addr(ip);
+  server.sin_family = AF_INET;
+  server.sin_port = htons(atoi(port));
+
+  if(inet_pton(AF_INET, ip, &(server.sin_addr))<=0){
+        printf("Invalid IP address given.\n");
+        close(sockit);
+        exit(1);
+  }
+
+  if(connect(sockit, (struct sockaddr*)&server, sizeof(server))<0){
+    printf("Connection failed. Please make sure you are using a valid IP address and port number.\n");
+    close(sockit);
+    exit(1);
+  }
+
+  //Sending the ss information.
+  if(send(sockit, packet, sizeof(ss_packet), 0)<0){
+    printf("Send failed.");
+    close(sockit);
+    exit(1);
+  }
+
+  //Waiting for the file.
+  printf("Waiting for file...\n");
+
+  //Process file. First, receive the size of the file.
+  char file_size[10];
+  int f_size = 0;
+  char* file_contents;
+  if(recv(sockit, file_size, 10, 0)<0){
+    printf("Could not recieve file information.\n");
+    close(sockit);
+    exit(1);
+  }
+
+  f_size = ntohl(atoi(file_size));
+  if(f_size >0){
+    file_contents = (char*) malloc(f_size);
+
+    printf("...\n");
+    if((recv(sockit, file_contents, f_size, MSG_WAITALL))<0){
+      printf("Could not recieve file.\n");
+      close(sockit);
+      exit(1);
+    }
+
+  }
+
+  close(sockit);
+  sleep(1);
+
+  //Processing file name.
+  char* file_name = strrchr(packet.url, '/');
+  if(file_name == NULL){
+    printf("No file name given, defaulting to index.html");
+    file_name = "index.html";
+  }
+  else{
+    file_name++;
+  }
+
+  printf("Received file %s\n", file_name);
+
+  //Writing to local file.
+  FILE *fptr;
+  //Open cgang file.
+  if((fptr = open(file_name, (O_CREAT | O_TRUNC | O_WRONLY), (S_IRGRP | S_IWGRP | S_IXGRP))) == -1){
+    printf("Problem creating file %s . Exiting program.\n", file_name);
+    exit(1);
+  }
+
+  //Write data to file.
+
+  //Quit. Free memory/close any connections. Close fptr.
+  
+}
+

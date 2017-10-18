@@ -19,14 +19,14 @@ What about getting the file back?
 #include <stdlib.h>
 
 struct ss{
-  char[50] ip;
-  char[6] port;
+  char ip[50];
+  char port[6];
 };
 
 struct ss_packet{
   uint8_t num_steps;
   char url[500];
   struct ss steps[256];
-}
+};
 
 #endif

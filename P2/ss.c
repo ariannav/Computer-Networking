@@ -3,10 +3,22 @@
 ss [-p port]
     port is optional, have a default.
 */
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <time.h>
+#include <sys/socket.h>
+#include <arpa/inet.h>
+#include <netdb.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <unistd.h>
 #include "awget.h"
 
 void ss_begin(int port);
 int create_ss(int last_ss_fd, struct ss_packet packet);
+int receive_file(int next_ss, int parent_socket, struct ss_packet packet);
 void get_ip(char* ip);
 void sighandler(int sig);
 
@@ -73,7 +85,7 @@ void ss_begin(int port){
     int new_socket, client_socket[30], parent_socket[30], max_clients = 30, activity, i, valread, sd;
     int max_sd;
     struct sockaddr_in address;
-    struct ss_packet packet;
+    struct ss_packet temp_packet/*, packet[30]*/;
 
     //Set all client sockets to 0.
     for(int i = 0; i < max_clients; i++){
@@ -112,13 +124,14 @@ void ss_begin(int port){
             }
 
             //Receiving information packet.
-            if(recv(new_socket, packet, sizeof(packet), 0) < 0){
+            if(recv(new_socket, temp_packet, sizeof(temp_packet), 0) < 0){
               printf("Could not receive packet from last ss. Exiting program.\n");
-              close(sockit);
+              close(new_socket);
               exit(1);
             }
 
-            int next_ss = create_ss(new_socket, packet);
+
+            int next_ss = create_ss(new_socket, temp_packet);
             if(next_ss != 0){
                 //Adding current client to list.
                 for(int i = 0, i < max_clients; i++){
@@ -132,6 +145,7 @@ void ss_begin(int port){
                 for(int i = 0, i < max_clients; i++){
                     if(client_socket[i] == 0){
                         client_socket[i] = next_ss;
+                        //memcpy(packet[i], temp_packet, sizeof(temp_packet));
                         parent_socket[i] = new_socket;
                         break;
                     }
@@ -140,13 +154,16 @@ void ss_begin(int port){
         }
 
         //Existing connection? Receiving file.
+        int success = 0;
         for(int i = 0; i < max_clients; i++){
             sd = client_socket[i];
             if(FD_ISSET(sd, &readfds)){
                 //Receiving file size and file.
-                receive_file(sd, parent_socket[i]);
-                close(sd);
-                client_socket[i] = 0; parent_socket[i] = 0;
+                if(success = receive_file(sd, parent_socket[i]/*, packet[i]*/)){
+                    close(sd);
+                    client_socket[i] = 0; parent_socket[i] = 0;
+                    //memset(packet[i], 0, sizeof(packet[i]));
+                }
             }
         }
     }
@@ -186,7 +203,38 @@ int create_ss(int last_ss_fd, struct ss_packet packet){
           packet.steps[j] = packet.steps[j+1];
       }
       packet.num_steps--;
-      //TODO: Create next step and return sd. Use awget code.
+
+      struct sockaddr_in server;
+
+      int next_ss = socket(AF_INET, SOCK_STREAM, 0);
+      if(next_ss == -1){
+        printf("Could not create socket! Exiting program.\n");
+        exit(1);
+      }
+
+      server.sin_addr.s_addr = inet_addr(ip);
+      server.sin_family = AF_INET;
+      server.sin_port = htons(atoi(port));
+
+      if(inet_pton(AF_INET, ip, &(server.sin_addr))<=0){
+            printf("Invalid IP address given.\n");
+            close(next_ss);
+            exit(1);
+      }
+
+      if(connect(next_ss, (struct sockaddr*)&server, sizeof(server))<0){
+        printf("Connection failed. Please make sure you are using a valid IP address and port number.\n");
+        close(next_ss);
+        exit(1);
+      }
+
+      //Sending the ss information.
+      if(send(next_ss, &packet, sizeof(packet), 0)<0){
+        printf("Send failed.");
+        close(next_ss);
+        exit(1);
+      }
+      return next_ss;
     }
     else{
       //Client list is empty, Process file name
@@ -220,7 +268,8 @@ int create_ss(int last_ss_fd, struct ss_packet packet){
       int open_file = open(file_name, O_RDONLY, (S_IRGRP | S_IWGRP | S_IXGRP));
       if(read(open_file, file_contents, file_size) < 0){
         printf("Error reading file read from wget. Exiting program.\n");
-        close(sockit);
+        close(last_ss_fd);
+        close(open_file);
         exit(1);
       }
       close(open_file);
@@ -236,24 +285,76 @@ int create_ss(int last_ss_fd, struct ss_packet packet){
       memcpy(size, f_size, sizeof(f_size));
       if(send(last_ss_fd, size, 10, 0) < 0){
         printf("Could not send file size. Exiting program.\n");
-        close(sockit);
+        close(last_ss_fd);
         exit(1);
       }
 
       //Sending file data.
       if(send(last_ss_fd, file_contents, f_size, 0) < 0){
         printf("Could not send file. Exiting program.\n");
-        close(sockit);
+        close(last_ss_fd);
         exit(1);
       }
       close(last_ss_fd);
+      free(file_contents); 
       return 0;
     }
 }
 
 //Receive the file from the next stepping stone and send it back to parent socket.
-receive_file(int next_ss, int parent_socket){
-    //TODO: Implement
+int receive_file(int next_ss, int parent_socket, struct ss_packet packet){
+    //Process file. First, receive the size of the file.
+    char file_size[10];
+    int f_size = 0;
+    char* file_contents;
+    if(recv(next_ss, file_size, 10, 0)<0){
+      printf("Could not recieve file information.\n");
+      close(next_ss);
+      exit(1);
+    }
+
+    f_size = ntohl(atoi(file_size));
+    if(f_size >0){
+      file_contents = (char*) malloc(f_size);
+
+      printf("...\n");
+      if((recv(next_ss, file_contents, f_size, MSG_WAITALL))<0){
+        printf("Could not recieve file.\n");
+        close(next_ss);
+        exit(1);
+      }
+    }
+
+    close(next_ss);
+    sleep(1);
+
+    // //Processing file name.
+    // char* file_name = strrchr(packet.url, '/');
+    // if(file_name == NULL){
+    //   printf("No file name given, defaulting to index.html");
+    //   file_name = "index.html";
+    // }
+    // else{
+    //   file_name++;
+    // }
+    //
+    // printf("Received file %s\n", file_name);
+
+    //Sending size
+    if(send(parent_socket, file_size, 10, 0) < 0){
+      printf("Could not send file size. Exiting program.\n");
+      close(next_ss);
+      exit(1);
+    }
+
+    //Sending file data.
+    if(send(parent_socket, file_contents, f_size, 0) < 0){
+      printf("Could not send file. Exiting program.\n");
+      close(next_ss);
+      exit(1);
+    }
+    free(file_contents);
+    return 1;
 }
 
 //Get this computer's IP to broadcast it.

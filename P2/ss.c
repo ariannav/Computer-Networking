@@ -6,6 +6,7 @@ ss [-p port]
 #include "awget.h"
 
 void ss_begin(int port);
+int create_ss(int last_ss_fd, struct ss_packet packet);
 void get_ip(char* ip);
 void sighandler(int sig);
 
@@ -32,7 +33,7 @@ int main(int argc, char *argv[]){
 void ss_begin(int port){
   struct sockaddr_in server;
 
-  //Creating socket
+  //Creating master socket
   sockit = socket(AF_INET, SOCK_STREAM, 0);
   if(sockit == -1){
     printf("Error creating socket. Exiting ss program.\n");
@@ -60,7 +61,6 @@ void ss_begin(int port){
 
   printf("ss <%s, %s>:\n", ip, port);
 
-  while(1){
     //Listening for connection from last SS.
     if(listen(sockit, 1) < 0){
       printf("Error listening for incoming connection. Exiting program.\n");
@@ -70,41 +70,90 @@ void ss_begin(int port){
 
     //Set up & using select.
     fd_set readfds;
-    int max_sd, activity, i;
-
-    FD_ZERO(&readfds);
-    FD_SET(sockit, &readfds);
-    max_sd = sockit;
-
-    if((activity = select(max_sd+1; &readfds, NULL, NULL< NULL))<0){
-      printf("Select failed. Exiting program.");
-      close(sockit);
-      exit(1);
-    }
-
-    //Create client, and accept connection.
-    struct sockaddr_in client;
-    socklen_t size = sizeof(client);
-    int last_ss_fd;
-
-    //If the sockit is set, then we know that we should accept a connection on there.
-    //At this point, only the previous ss will be connecting to this socket.
-    if(FD_ISSET(sockit, &readfds)){
-      if((last_ss_fd = accept(sockit, (struct sockaddr*) &client, &size)) < 0){
-        printf("Last stepping stone not accepted. Exiting program.\n");
-        close(sockit);
-        exit(1);
-      }
-    }
-
-    //Receive list of stepping stones
+    int new_socket, client_socket[30], parent_socket[30], max_clients = 30, activity, i, valread, sd;
+    int max_sd;
+    struct sockaddr_in address;
     struct ss_packet packet;
-    if(recv(last_ss_fd, packet, sizeof(packet), 0) < 0){
-      printf("Could not receive packet from last ss. Exiting program.\n");
-      close(sockit);
-      exit(1);
+
+    //Set all client sockets to 0.
+    for(int i = 0; i < max_clients; i++){
+        client_socket[i] = 0;
+        parent_socket[i] = 0;
     }
 
+    while(1){
+        FD_ZERO(&readfds);
+        FD_SET(sockit, &readfds);
+        max_sd = sockit;
+
+        //Adding existing clients to readfds
+        for(int i = 0; i < max_clients; i++){
+            sd = client_socket[i];
+            if(sd > 0){
+                FD_SET(sd, &readfds);
+            }
+            if(sd > max_sd){
+                max_sd = sd;
+            }
+        }
+
+        if((activity = select(max_sd+1; &readfds, NULL, NULL, NULL))<0){
+          printf("Select failed. Exiting program.");
+          close(sockit);
+          exit(1);
+        }
+
+        //Incoming connection?
+        if(FD_ISSET(sockit, &readfds)){
+            if((new_socket = accept(sockit, (struct sockaddr*) &address, (socklen_t*)&addrlen)) < 0){
+                printf("Last stepping stone not accepted. Exiting program.\n");
+                close(sockit);
+                exit(1);
+            }
+
+            //Receiving information packet.
+            if(recv(new_socket, packet, sizeof(packet), 0) < 0){
+              printf("Could not receive packet from last ss. Exiting program.\n");
+              close(sockit);
+              exit(1);
+            }
+
+            int next_ss = create_ss(new_socket, packet);
+            if(next_ss != 0){
+                //Adding current client to list.
+                for(int i = 0, i < max_clients; i++){
+                    if(client_socket[i] == 0){
+                        client_socket[i] = new_socket;
+                        break;
+                    }
+                }
+
+                //Adding next ss to list.
+                for(int i = 0, i < max_clients; i++){
+                    if(client_socket[i] == 0){
+                        client_socket[i] = next_ss;
+                        parent_socket[i] = new_socket;
+                        break;
+                    }
+                }
+            }
+        }
+
+        //Existing connection? Receiving file.
+        for(int i = 0; i < max_clients; i++){
+            sd = client_socket[i];
+            if(FD_ISSET(sd, &readfds)){
+                //Receiving file size and file.
+                receive_file(sd, parent_socket[i]);
+                close(sd);
+                client_socket[i] = 0; parent_socket[i] = 0;
+            }
+        }
+    }
+}
+
+int create_ss(int last_ss_fd, struct ss_packet packet){
+    //Process packet and return socket file desc of next ss.
     //Process packet, and share URL/Future SS list, if num_steps = 0, fetch the file.
     printf("Request: %s\n", packet.url);
 
@@ -137,7 +186,7 @@ void ss_begin(int port){
           packet.steps[j] = packet.steps[j+1];
       }
       packet.num_steps--;
-      //TODO: Go to the next step.
+      //TODO: Create next step and return sd. Use awget code.
     }
     else{
       //Client list is empty, Process file name
@@ -175,7 +224,7 @@ void ss_begin(int port){
         exit(1);
       }
       close(open_file);
-      
+
       //Removing file:
       command = "";
       sprintf(command, "rm %s", file_name);
@@ -197,12 +246,15 @@ void ss_begin(int port){
         close(sockit);
         exit(1);
       }
-      //Done here!
-      //TODO: Do I need to do anything to listen again?
+      close(last_ss_fd);
+      return 0;
     }
-  }
 }
 
+//Receive the file from the next stepping stone and send it back to parent socket.
+receive_file(int next_ss, int parent_socket){
+    //TODO: Implement
+}
 
 //Get this computer's IP to broadcast it.
 void get_ip(char* ip){

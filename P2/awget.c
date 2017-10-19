@@ -60,7 +60,6 @@ void ss_start(char* url, char* cgang){
   struct ss_packet packet;
   packet.num_steps = num_ss;
 
-
   //Populate & Print Chainlist
   printf("Chainlist is: \n");
   for(int i = 0; i< num_ss; i++){

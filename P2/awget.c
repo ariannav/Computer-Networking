@@ -22,15 +22,15 @@ int main(int argc, char* argv[]){
     //Grab chaingang.txt
     ss_start(url, cgang);
   }
-  else if(argc==3){
+  else if(argc==4){
     url = arg[1];
-    cgang = arg[2];
+    cgang = arg[3];
     //Do something with chaingang and URL
     ss_start(url, cgang);
   }
   else{
     //Usage error.
-    printf("Usage: $awget <URL> [-c chainfile]\n");
+    printf("Usage: $./awget <URL> [-c chainfile]\n");
   }
 
 }
@@ -160,6 +160,6 @@ void client_connect(char* ip, char* port, struct ss_packet packet){
   //Write data to file.
 
   //Quit. Free memory/close any connections. Close fptr.
-  
+
 }
 

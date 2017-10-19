@@ -7,18 +7,25 @@
 #include <sys/socket.h>
 #include <arpa/inet.h>
 #include <netdb.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <unistd.h>
 #include "awget.h"
 
 /*awget <URL> [-c chainfile]
             or local chaingang.txt
             or error and exit.
 */
+void ss_start(char* url, char* cgang);
+void client_connect(char* ip, char* port, struct ss_packet packet);
+
 int main(int argc, char* argv[]){
   char* url;
   char* cgang = "./chaingang.txt";
 
   if(argc==2){
-    url = arg[1];
+    url = argv[1];
     //Grab chaingang.txt
     ss_start(url, cgang);
   }
@@ -35,7 +42,7 @@ int main(int argc, char* argv[]){
 
 }
 
-ss_start(char* url, char* cgang){
+void ss_start(char* url, char* cgang){
   printf("Request: %s\n", url);
 
   FILE *fptr;
@@ -47,7 +54,7 @@ ss_start(char* url, char* cgang){
   }
 
   //Get number of stepping stones.
-  fgets(line, 50, (FILE*)fp);
+  fgets(line, 50, (FILE*)fptr);
   int num_ss = atoi(line);
 
   struct ss_packet packet;
@@ -55,11 +62,11 @@ ss_start(char* url, char* cgang){
 
 
   //Populate & Print Chainlist
-  printf("Chainlist is: \n")
+  printf("Chainlist is: \n");
   for(int i = 0; i< num_ss; i++){
-    fscanf(fp, "%s", line);
+    fscanf(fptr, "%s", line);
     strcpy(packet.steps[i].ip, line);
-    fscanf(fp, "%s", line);
+    fscanf(fptr, "%s", line);
     strncpy(packet.steps[i].port, line, 6);
     printf("<%s, %s>\n", packet.steps[i].ip, packet.steps[i].port);
   }
@@ -67,9 +74,16 @@ ss_start(char* url, char* cgang){
   //Pick a random ss
   srand(time(NULL));
   int r = rand() % num_ss;
-  char ip[50]; strcpy(ip, packet.steps[i].ip);
-  char port[6]; strcpy(port, packet.steps[i].port);
+  char ip[50]; strcpy(ip, packet.steps[r].ip);
+  char port[6]; strcpy(port, packet.steps[r].port);
   printf("Next SS is <%s, %s>\n", ip, port);
+
+  //Remove ss from packet.
+  num_ss--;
+  for(int j = r; j<num_ss; j++){
+      packet.steps[j] = packet.steps[j+1];
+  }
+  packet.num_steps--;
 
   //Connect to ss as client
   client_connect(ip, port, packet);
@@ -77,10 +91,10 @@ ss_start(char* url, char* cgang){
 }
 
 void client_connect(char* ip, char* port, struct ss_packet packet){
-  struct sockarrd_in server;
+  struct sockaddr_in server;
 
   int sockit = socket(AF_INET, SOCK_STREAM, 0);
-  if sockit == -1){
+  if(sockit == -1){
     printf("Could not create socket! Exiting program.\n");
     exit(1);
   }
@@ -102,7 +116,7 @@ void client_connect(char* ip, char* port, struct ss_packet packet){
   }
 
   //Sending the ss information.
-  if(send(sockit, packet, sizeof(ss_packet), 0)<0){
+  if(send(sockit, &packet, sizeof(packet), 0)<0){
     printf("Send failed.");
     close(sockit);
     exit(1);
@@ -121,6 +135,7 @@ void client_connect(char* ip, char* port, struct ss_packet packet){
     exit(1);
   }
 
+
   f_size = ntohl(atoi(file_size));
   if(f_size >0){
     file_contents = (char*) malloc(f_size);
@@ -131,7 +146,6 @@ void client_connect(char* ip, char* port, struct ss_packet packet){
       close(sockit);
       exit(1);
     }
-
   }
 
   close(sockit);
@@ -150,16 +164,24 @@ void client_connect(char* ip, char* port, struct ss_packet packet){
   printf("Received file %s\n", file_name);
 
   //Writing to local file.
-  FILE *fptr;
+  int fptr;
   //Open cgang file.
-  if((fptr = open(file_name, (O_CREAT | O_TRUNC | O_WRONLY), (S_IRGRP | S_IWGRP | S_IXGRP))) == -1){
+  if((fptr = open(file_name, (O_CREAT | O_TRUNC | O_WRONLY), (S_IRGRP | S_IWGRP | S_IXGRP))) < 0){
     printf("Problem creating file %s . Exiting program.\n", file_name);
     exit(1);
   }
 
   //Write data to file.
+  int success;
+  if((success = write(fptr, &file_contents, f_size))<0){
+      printf("Error writing to file %s. Exiting program.\n", file_name);
+      close(fptr);
+      exit(1);
+  }
 
   //Quit. Free memory/close any connections. Close fptr.
-
+  close(fptr);
+  free(file_contents);
+  printf("Goodbye!");
 }
 

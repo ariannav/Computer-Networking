@@ -14,11 +14,12 @@ ss [-p port]
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <unistd.h>
+#include <sys/stat.h>
 #include "awget.h"
 
 void ss_begin(int port);
 int create_ss(int last_ss_fd, struct ss_packet packet);
-int receive_file(int next_ss, int parent_socket, struct ss_packet packet);
+int receive_file(int next_ss, int parent_socket/*, struct ss_packet packet*/);
 void get_ip(char* ip);
 void sighandler(int sig);
 
@@ -26,7 +27,7 @@ int sockit;
 
 int main(int argc, char *argv[]){
 
-  int port;
+  int port = 7014;
   if(argc == 1){
     port = 7014;
   }
@@ -71,7 +72,7 @@ void ss_begin(int port){
       exit(1);
   }
 
-  printf("ss <%s, %s>:\n", ip, port);
+  printf("ss <%s, %d>:\n", ip, port);
 
     //Listening for connection from last SS.
     if(listen(sockit, 1) < 0){
@@ -82,9 +83,10 @@ void ss_begin(int port){
 
     //Set up & using select.
     fd_set readfds;
-    int new_socket, client_socket[30], parent_socket[30], max_clients = 30, activity, i, valread, sd;
+    int new_socket, client_socket[30], parent_socket[30], max_clients = 30, activity, sd;
     int max_sd;
-    struct sockaddr_in address;
+    struct sockaddr_in client;
+    socklen_t size = sizeof(client);
     struct ss_packet temp_packet/*, packet[30]*/;
 
     //Set all client sockets to 0.
@@ -109,7 +111,7 @@ void ss_begin(int port){
             }
         }
 
-        if((activity = select(max_sd+1; &readfds, NULL, NULL, NULL))<0){
+        if((activity = select(max_sd+1, &readfds, NULL, NULL, NULL))<0){
           printf("Select failed. Exiting program.");
           close(sockit);
           exit(1);
@@ -117,14 +119,14 @@ void ss_begin(int port){
 
         //Incoming connection?
         if(FD_ISSET(sockit, &readfds)){
-            if((new_socket = accept(sockit, (struct sockaddr*) &address, (socklen_t*)&addrlen)) < 0){
+            if((new_socket = accept(sockit, (struct sockaddr*) &client, &size)) < 0){
                 printf("Last stepping stone not accepted. Exiting program.\n");
                 close(sockit);
                 exit(1);
             }
 
             //Receiving information packet.
-            if(recv(new_socket, temp_packet, sizeof(temp_packet), 0) < 0){
+            if(recv(new_socket, &temp_packet, sizeof(temp_packet), 0) < 0){
               printf("Could not receive packet from last ss. Exiting program.\n");
               close(new_socket);
               exit(1);
@@ -134,19 +136,19 @@ void ss_begin(int port){
             int next_ss = create_ss(new_socket, temp_packet);
             if(next_ss != 0){
                 //Adding current client to list.
-                for(int i = 0, i < max_clients; i++){
-                    if(client_socket[i] == 0){
-                        client_socket[i] = new_socket;
+                for(int j = 0; j < max_clients; j++){
+                    if(client_socket[j] == 0){
+                        client_socket[j] = new_socket;
                         break;
                     }
                 }
 
                 //Adding next ss to list.
-                for(int i = 0, i < max_clients; i++){
-                    if(client_socket[i] == 0){
-                        client_socket[i] = next_ss;
-                        //memcpy(packet[i], temp_packet, sizeof(temp_packet));
-                        parent_socket[i] = new_socket;
+                for(int k = 0; k < max_clients; k++){
+                    if(client_socket[k] == 0){
+                        client_socket[k] = next_ss;
+                        //memcpy(packet[k], temp_packet, sizeof(temp_packet));
+                        parent_socket[k] = new_socket;
                         break;
                     }
                 }
@@ -159,7 +161,7 @@ void ss_begin(int port){
             sd = client_socket[i];
             if(FD_ISSET(sd, &readfds)){
                 //Receiving file size and file.
-                if(success = receive_file(sd, parent_socket[i]/*, packet[i]*/)){
+                if((success = receive_file(sd, parent_socket[i]/*, packet[i]*/))){
                     close(sd);
                     client_socket[i] = 0; parent_socket[i] = 0;
                     //memset(packet[i], 0, sizeof(packet[i]));
@@ -192,17 +194,16 @@ int create_ss(int last_ss_fd, struct ss_packet packet){
     if(!cl_empty){
       //Keep passing on.
       srand(time(NULL));
-      int r = rand() % num_ss;
-      char ip[50]; strcpy(ip, packet.steps[i].ip);
-      char port[6]; strcpy(port, packet.steps[i].port);
+      int r = rand() % packet.num_steps;
+      char ip[50]; strcpy(ip, packet.steps[r].ip);
+      char port[6]; strcpy(port, packet.steps[r].port);
       printf("Next SS is <%s, %s>\n", ip, port);
 
       //Remove ss from packet.
-      num_ss--;
-      for(int j = r; j<num_ss; j++){
+      packet.num_steps--;
+      for(int j = r; j<packet.num_steps; j++){
           packet.steps[j] = packet.steps[j+1];
       }
-      packet.num_steps--;
 
       struct sockaddr_in server;
 
@@ -250,7 +251,7 @@ int create_ss(int last_ss_fd, struct ss_packet packet){
       //wget(url)
       char command[550];
       long int f_size = 0;
-      struct stats file_stats;
+      struct stat file_stats;
       printf("Issuing wget for file %s\n", file_name);
       sprintf(command, "wget -q %s", packet.url);
       system(command);
@@ -266,7 +267,7 @@ int create_ss(int last_ss_fd, struct ss_packet packet){
       //Getting file contents.
       char *file_contents = (char *) malloc(f_size);
       int open_file = open(file_name, O_RDONLY, (S_IRGRP | S_IWGRP | S_IXGRP));
-      if(read(open_file, file_contents, file_size) < 0){
+      if(read(open_file, file_contents, f_size) < 0){
         printf("Error reading file read from wget. Exiting program.\n");
         close(last_ss_fd);
         close(open_file);
@@ -275,14 +276,14 @@ int create_ss(int last_ss_fd, struct ss_packet packet){
       close(open_file);
 
       //Removing file:
-      command = "";
+      memset(command, 0, 550);
       sprintf(command, "rm %s", file_name);
       system(command);
 
       //Sending size
       char size[10];
-      f_size = htonl(f_size);\
-      memcpy(size, f_size, sizeof(f_size));
+      f_size = htonl(f_size);
+      memcpy(size, &f_size, sizeof(f_size));
       if(send(last_ss_fd, size, 10, 0) < 0){
         printf("Could not send file size. Exiting program.\n");
         close(last_ss_fd);
@@ -296,13 +297,13 @@ int create_ss(int last_ss_fd, struct ss_packet packet){
         exit(1);
       }
       close(last_ss_fd);
-      free(file_contents); 
+      free(file_contents);
       return 0;
     }
 }
 
 //Receive the file from the next stepping stone and send it back to parent socket.
-int receive_file(int next_ss, int parent_socket, struct ss_packet packet){
+int receive_file(int next_ss, int parent_socket/*, struct ss_packet packet*/){
     //Process file. First, receive the size of the file.
     char file_size[10];
     int f_size = 0;

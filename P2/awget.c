@@ -30,8 +30,8 @@ int main(int argc, char* argv[]){
     ss_start(url, cgang);
   }
   else if(argc==4){
-    url = arg[1];
-    cgang = arg[3];
+    url = argv[1];
+    cgang = argv[3];
     //Do something with chaingang and URL
     ss_start(url, cgang);
   }

@@ -15,6 +15,7 @@ ss [-p port]
 #include <fcntl.h>
 #include <unistd.h>
 #include <sys/stat.h>
+#include <signal.h>
 #include "awget.h"
 
 void ss_begin(int port);

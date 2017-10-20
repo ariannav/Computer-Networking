@@ -59,6 +59,7 @@ void ss_start(char* url, char* cgang){
 
   struct ss_packet packet;
   packet.num_steps = num_ss;
+  memcpy(packet.url, url, 500);
 
   //Populate & Print Chainlist
   printf("Chainlist is: \n");
@@ -134,12 +135,11 @@ void client_connect(char* ip, char* port, struct ss_packet packet){
     exit(1);
   }
 
-
-  f_size = ntohl(atoi(file_size));
+  printf("Size of file: %s\n", file_size);
+  f_size = atoi(file_size);
+  file_contents = (char*) malloc(f_size);
   if(f_size >0){
-    file_contents = (char*) malloc(f_size);
-
-    printf("...\n");
+    printf("..\n");
     if((recv(sockit, file_contents, f_size, MSG_WAITALL))<0){
       printf("Could not recieve file.\n");
       close(sockit);
@@ -162,25 +162,12 @@ void client_connect(char* ip, char* port, struct ss_packet packet){
 
   printf("Received file %s\n", file_name);
 
-  //Writing to local file.
-  int fptr;
-  //Open cgang file.
-  if((fptr = open(file_name, (O_CREAT | O_TRUNC | O_WRONLY), (S_IRGRP | S_IWGRP | S_IXGRP))) < 0){
-    printf("Problem creating file %s . Exiting program.\n", file_name);
-    exit(1);
-  }
-
-  //Write data to file.
-  int success;
-  if((success = write(fptr, &file_contents, f_size))<0){
-      printf("Error writing to file %s. Exiting program.\n", file_name);
-      close(fptr);
-      exit(1);
-  }
+  FILE* file = fopen(file_name, "wb");
+  fwrite(file_contents, 1, f_size, file);
 
   //Quit. Free memory/close any connections. Close fptr.
-  close(fptr);
+  fclose(file);
   free(file_contents);
-  printf("Goodbye!");
+  printf("Goodbye!\n");
 }
 

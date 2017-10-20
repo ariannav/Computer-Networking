@@ -37,6 +37,7 @@ int main(int argc, char *argv[]){
   }
   else{
     printf("Usage: $./ss [-p port]\n");
+    exit(1);
   }
 
   ss_begin(port);
@@ -127,29 +128,19 @@ void ss_begin(int port){
             }
 
             //Receiving information packet.
-            if(recv(new_socket, &temp_packet, sizeof(temp_packet), 0) < 0){
+            if(recv(new_socket, &temp_packet, sizeof(temp_packet), MSG_WAITALL) < 0){
               printf("Could not receive packet from last ss. Exiting program.\n");
               close(new_socket);
               exit(1);
             }
-
 
             int next_ss = create_ss(new_socket, temp_packet);
             if(next_ss != 0){
                 //Adding current client to list.
                 for(int j = 0; j < max_clients; j++){
                     if(client_socket[j] == 0){
-                        client_socket[j] = new_socket;
-                        break;
-                    }
-                }
-
-                //Adding next ss to list.
-                for(int k = 0; k < max_clients; k++){
-                    if(client_socket[k] == 0){
-                        client_socket[k] = next_ss;
-                        //memcpy(packet[k], temp_packet, sizeof(temp_packet));
-                        parent_socket[k] = new_socket;
+                        client_socket[j] = next_ss;
+                        parent_socket[j] = new_socket;
                         break;
                     }
                 }
@@ -162,10 +153,11 @@ void ss_begin(int port){
             sd = client_socket[i];
             if(FD_ISSET(sd, &readfds)){
                 //Receiving file size and file.
-                if((success = receive_file(sd, parent_socket[i]/*, packet[i]*/))){
+                if((success = receive_file(sd, parent_socket[i]))){
                     close(sd);
                     client_socket[i] = 0; parent_socket[i] = 0;
-                    //memset(packet[i], 0, sizeof(packet[i]));
+                    FD_CLR(sd, &readfds);
+                    break;
                 }
             }
         }
@@ -198,7 +190,7 @@ int create_ss(int last_ss_fd, struct ss_packet packet){
       int r = rand() % packet.num_steps;
       char ip[50]; strcpy(ip, packet.steps[r].ip);
       char port[6]; strcpy(port, packet.steps[r].port);
-      printf("Next SS is <%s, %s>\n", ip, port);
+      printf("Next ss is <%s, %s>\n", ip, port);
 
       //Remove ss from packet.
       packet.num_steps--;
@@ -236,13 +228,15 @@ int create_ss(int last_ss_fd, struct ss_packet packet){
         close(next_ss);
         exit(1);
       }
+      printf("Waiting for file...\n");
       return next_ss;
     }
     else{
       //Client list is empty, Process file name
+      //printf("Packet URL: %s\tStepping stones: %d\n", packet.url, packet.num_steps);
       char* file_name = strrchr(packet.url, '/');
       if(file_name == NULL){
-        printf("No file name given, defaulting to index.html");
+        printf("No file name given, defaulting to index.html/\n");
         file_name = "index.html";
       }
       else{
@@ -252,22 +246,23 @@ int create_ss(int last_ss_fd, struct ss_packet packet){
       //wget(url)
       char command[550];
       long int f_size = 0;
-      struct stat file_stats;
+      //struct stat file_stats;
       printf("Issuing wget for file %s\n", file_name);
       sprintf(command, "wget -q %s", packet.url);
       system(command);
+      printf("File received.\n");
 
-      //Getting file size.
-      if(stat(file_name, &file_stats) == 0){
-        f_size = file_stats.st_size;
-      }
-      else{
-        printf("No file retrieved. Sending back empty buffer.\n");
-      }
+      FILE *fp = fopen(file_name, "r");
+      fseek(fp, 0L, SEEK_END);
+      f_size = ftell(fp);
+      fseek(fp, 0L, SEEK_SET);
+      fclose(fp);
+
+      //printf("File size hola: %ld\n", f_size);
 
       //Getting file contents.
       char *file_contents = (char *) malloc(f_size);
-      int open_file = open(file_name, O_RDONLY, (S_IRGRP | S_IWGRP | S_IXGRP));
+      int open_file = open(file_name, O_RDONLY, 0666);
       if(read(open_file, file_contents, f_size) < 0){
         printf("Error reading file read from wget. Exiting program.\n");
         close(last_ss_fd);
@@ -283,8 +278,10 @@ int create_ss(int last_ss_fd, struct ss_packet packet){
 
       //Sending size
       char size[10];
-      f_size = htonl(f_size);
-      memcpy(size, &f_size, sizeof(f_size));
+      ///f_size = htonl(f_size);
+      sprintf(size, "%ld", f_size);
+      //memcpy(size, &f_size, sizeof(f_size));
+      //printf("Sending size: %s\t number in f_size: %ld\n", size, f_size);
       if(send(last_ss_fd, size, 10, 0) < 0){
         printf("Could not send file size. Exiting program.\n");
         close(last_ss_fd);
@@ -292,6 +289,7 @@ int create_ss(int last_ss_fd, struct ss_packet packet){
       }
 
       //Sending file data.
+      printf("..\nRelaying file ...\n");
       if(send(last_ss_fd, file_contents, f_size, 0) < 0){
         printf("Could not send file. Exiting program.\n");
         close(last_ss_fd);
@@ -299,6 +297,7 @@ int create_ss(int last_ss_fd, struct ss_packet packet){
       }
       close(last_ss_fd);
       free(file_contents);
+      printf("Goodbye!\n");
       return 0;
     }
 }
@@ -315,11 +314,12 @@ int receive_file(int next_ss, int parent_socket/*, struct ss_packet packet*/){
       exit(1);
     }
 
-    f_size = ntohl(atoi(file_size));
+    //printf("file size string: %s\n",file_size);
+    f_size = atoi(file_size);
     if(f_size >0){
       file_contents = (char*) malloc(f_size);
 
-      printf("...\n");
+      //printf("...\n");
       if((recv(next_ss, file_contents, f_size, MSG_WAITALL))<0){
         printf("Could not recieve file.\n");
         close(next_ss);
@@ -327,22 +327,13 @@ int receive_file(int next_ss, int parent_socket/*, struct ss_packet packet*/){
       }
     }
 
+    printf("..\nRelaying file ...\n");
+
     close(next_ss);
     sleep(1);
 
-    // //Processing file name.
-    // char* file_name = strrchr(packet.url, '/');
-    // if(file_name == NULL){
-    //   printf("No file name given, defaulting to index.html");
-    //   file_name = "index.html";
-    // }
-    // else{
-    //   file_name++;
-    // }
-    //
-    // printf("Received file %s\n", file_name);
-
     //Sending size
+    printf("Parent socket: %d\nFile size: %d\n", parent_socket, f_size);
     if(send(parent_socket, file_size, 10, 0) < 0){
       printf("Could not send file size. Exiting program.\n");
       close(next_ss);
@@ -356,6 +347,7 @@ int receive_file(int next_ss, int parent_socket/*, struct ss_packet packet*/){
       exit(1);
     }
     free(file_contents);
+    printf("Goodbye!\n");
     return 1;
 }
 

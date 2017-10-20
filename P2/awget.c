@@ -23,15 +23,26 @@ void client_connect(char* ip, char* port, struct ss_packet packet);
 int main(int argc, char* argv[]){
   char* url;
   char* cgang = "./chaingang.txt";
+  char command[550];
 
   if(argc==2){
     url = argv[1];
+    sprintf(command, "wget -q --spider %s", url);
+    if(system(command)){
+        printf("Please provide a valid URL.\n");
+        exit(1);
+    }
     //Grab chaingang.txt
     ss_start(url, cgang);
   }
   else if(argc==4){
     url = argv[1];
     cgang = argv[3];
+    sprintf(command, "wget -q --spider %s", url);
+    if(system(command)){
+        printf("Please provide a valid URL.\n");
+        exit(1);
+    }
     //Do something with chaingang and URL
     ss_start(url, cgang);
   }
@@ -153,7 +164,7 @@ void client_connect(char* ip, char* port, struct ss_packet packet){
   //Processing file name.
   char* file_name = strrchr(packet.url, '/');
   if(file_name == NULL){
-    printf("No file name given, defaulting to index.html");
+    printf("No file name given, defaulting to index.html\n");
     file_name = "index.html";
   }
   else{

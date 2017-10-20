@@ -1,9 +1,9 @@
 Author: Arianna Vacca
 Assignment: 457 PA2
 
-******
-README
-******
+*****************************************************
+                       README
+*****************************************************
 
 COMPILE
 ==================
@@ -41,4 +41,4 @@ ASSUMPTIONS
     - A stepping stone run without a port number ($./ss) will run from port 7014.
     - If no chainfile is given when running awget ($./awget <URL>), a properly
       formatted chaingang.txt must be within the working directory.
-    - The maximum number of stepping stones is 30. 
+    - The maximum number of stepping stones is 30.

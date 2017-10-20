@@ -236,7 +236,7 @@ int create_ss(int last_ss_fd, struct ss_packet packet){
       //printf("Packet URL: %s\tStepping stones: %d\n", packet.url, packet.num_steps);
       char* file_name = strrchr(packet.url, '/');
       if(file_name == NULL){
-        printf("No file name given, defaulting to index.html/\n");
+        printf("No file name given, defaulting to index.html\n");
         file_name = "index.html";
       }
       else{

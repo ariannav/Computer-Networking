@@ -36,8 +36,7 @@ HOW TO USE
 
 ASSUMPTIONS
 ==================
-    - All URLs given must begin with "https://", "http://", or "www."
-    - A working URL must be given.
+    - The program will inform you when an invalid URL is given.
     - A stepping stone run without a port number ($./ss) will run from port 7014.
     - If no chainfile is given when running awget ($./awget <URL>), a properly
       formatted chaingang.txt must be within the working directory.

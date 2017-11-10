@@ -7,7 +7,7 @@
 
 #include <netdb.h>
 #include <arpa/inet.h>
-#include <string.h> 
+#include <string.h>
 
 //Data Structures
 struct links{
@@ -18,6 +18,8 @@ struct links{
 
 struct router_packet{
     int node_num;
+    int udp_port;
+    int tcp_port; 
     int num_routers;
     struct links link;
 };

@@ -7,3 +7,5 @@ ________________________________________________________________________________
 2               - packet[i] now contains a source and destination for a packet.
                 - num_packets now contains the number of packets to be sent.
 ________________________________________________________________________________
+3               - Spawned N unit processes for each router.
+________________________________________________________________________________

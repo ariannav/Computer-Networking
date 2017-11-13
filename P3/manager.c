@@ -22,6 +22,10 @@ void serve();
 void sighandler(int sig);
 void create_router(int router_number, int tcp_port, int udp_port);
 int tcp_to_router(int tcp_socket);
+void process_incoming_connection(int new_socket, int router_number);
+void all_routers_send(int* router_socket, char* message);
+void select_routers(int* router_socket, struct sockaddr_in router, socklen_t size);
+void send_packet_information();
 
 //Class Variables
 struct links router_link[100];
@@ -50,8 +54,12 @@ int main(int argc, char* argv[]){
     sprintf(line, "File processed. Number of routers: %d, number of packets: %d.", num_routers, num_packets);
     mlog(line);
 
-    //Spawn N unix processes.
-    spawn(); //TODO: TIME TO DEBUG
+    //Spawn N unix processes. CP 3 - 6.
+    spawn();
+
+    //======== Checkpoint 7 ========
+    mlog("Goodbye!\n");
+
 }
 
 //-------------------------- CREATING ROUTERS ----------------------------------
@@ -79,6 +87,7 @@ void spawn(){
     }
 
     //======== Checkpoint 3 ========
+    printf("Checkpoint 3 complete.\n");
     serve();
 
     //Wait for routers to exit.
@@ -87,6 +96,7 @@ void spawn(){
         waitpid(process_id[i], &status, 0);
     }
 
+    mlog("All routers have quit, Manager is quitting now.\n");
 }
 
 void serve(){
@@ -118,13 +128,44 @@ void serve(){
     sprintf(line, "Broadcasting on IP: %s", ip);
     mlog(line);
 
+    //Listening for connection from first router.
+    if(listen(sockit, 1) < 0){
+      printf("Error listening for incoming connection. Exiting program.\n");
+      close(sockit);
+      exit(1);
+    }
+
     //Sharing initial information with routers.
-    fd_set readfds;
     struct sockaddr_in router;
     socklen_t size = sizeof(router);
-    int router_socket[num_routers], new_socket, activity, sd, max_sd, num_ready = 0;
-    memset(router_socket, '0', 100);
+    int router_socket[num_routers];
+    for(int i = 0; i < num_routers; i++){ router_socket[i] = 0; }
 
+    select_routers(router_socket, router, size);
+
+    //======== Checkpoint 4 ========
+    printf("Checkpoint 4 complete.\n");
+    mlog("All routers are ready.\n");
+
+    //All routers are ready.
+    all_routers_send(router_socket, "Send edge topology to neighbors.");
+    select_routers(router_socket, router, size);
+    mlog("All routers have sent edge topology information to neighbors.\n");
+    all_routers_send(router_socket, "Create forwarding table.");
+    select_routers(router_socket, router, size);
+    mlog("All routers have created their routing table.\n");
+
+    //======== Checkpoint 5 ========
+    printf("Checkpoint 5 complete.\n");
+    mlog("Manager is ready to begin sending individual packet information.\n");
+
+    send_packet_information();
+}
+
+void select_routers(int* router_socket, struct sockaddr_in router, socklen_t size){
+    fd_set readfds;
+    int new_socket, activity, sd, max_sd, num_ready = 0;
+    char line[100];
     while(num_ready < num_routers){
         FD_ZERO(&readfds);
         FD_SET(sockit, &readfds);
@@ -150,17 +191,9 @@ void serve(){
         //Incoming connection? New router contacting me <3 so cute ^.^
         if(FD_ISSET(sockit, &readfds)){
             if((new_socket = accept(sockit, (struct sockaddr*) &router, &size)) < 0){
-                printf("Last stepping stone not accepted. Exiting program.\n");
+                printf("New router connection failed. Exiting program.\n");
                 close(sockit);
                 exit(1);
-            }
-
-            //Receiving UDP port number.
-            int udp_port;
-            if(recv(new_socket, &udp_port, sizeof(int), MSG_WAITALL) < 0){
-              printf("Could not receive packet from last ss. Exiting program.\n");
-              close(new_socket);
-              exit(1);
             }
 
             int router_number;
@@ -171,7 +204,7 @@ void serve(){
                     break;
                 }
             }
-            create_router(router_number, new_socket, udp_port);
+            process_incoming_connection(new_socket, router_number);
         }
 
         //Existing connection? Receiving "Ready!" signal.
@@ -180,7 +213,7 @@ void serve(){
             if(FD_ISSET(sd, &readfds)){
                 int status;
                 if(recv(sd, &status, sizeof(status), MSG_WAITALL) < 0){
-                  printf("Could not receive packet from last ss. Exiting program.\n");
+                  printf("Could not receive packet from router. Exiting program.\n");
                   close(new_socket);
                   exit(1);
                 }
@@ -221,6 +254,88 @@ int tcp_to_router(int tcp_socket){
         }
     }
     return -1;
+}
+
+void process_incoming_connection(int new_socket, int router_number){
+    //Receiving UDP port number.
+    int udp_port;
+    if(recv(new_socket, &udp_port, sizeof(int), MSG_WAITALL) < 0){
+      printf("Could not receive packet from last ss. Exiting program.\n");
+      close(new_socket);
+      exit(1);
+    }
+
+    create_router(router_number, new_socket, udp_port);
+
+    if(send(new_socket, &router_info[router_number], sizeof(router_info[router_number]), 0)<0){
+        printf("Send failed.");
+        close(new_socket);
+        exit(1);
+    }
+}
+
+void all_routers_send(int* router_socket, char* message){
+    char line[100];
+    int router_number;
+    for(int i = 0; i < num_routers; i++){
+        if(send(router_socket[i], &message, sizeof(message), 0)<0){
+            printf("Send failed.");
+            close(router_socket[i]);
+            exit(1);
+        }
+        router_number = tcp_to_router(router_socket[i]);
+        sprintf(line, "Manager to Router %d: %s\n", router_number, message);
+        mlog(line);
+    }
+}
+
+//-------------------------- SENDING PACKET INFO -------------------------------
+void send_packet_information(){
+    // struct router_packet router_info[100];
+    // int num_routers;
+    // struct packet_src_dest packet[1000];
+    // int num_packets;
+
+    for(int i = 0; i < num_packets; i++){
+        int source = packet[i].src;
+        int source_socket = router_info[source].tcp_port;
+        if(send(source_socket, &packet[i], sizeof(packet), 0)<0){
+            printf("Send failed.");
+            close(source_socket);
+            exit(1);
+        }
+        char line[100];
+        sprintf(line, "Manager to Router %d: Send packet to router %d\n", source, packet[i].dest);
+        mlog(line);
+
+        int received;
+        if(recv(source_socket, &received, sizeof(int), MSG_WAITALL) < 0){
+          printf("Could not receive packet from last ss. Exiting program.\n");
+          close(source_socket);
+          exit(1);
+        }
+        sprintf(line, "Received confirmation from router %d.\n", source);
+        mlog(line);
+    }
+
+    //All packets have been sent.
+    struct packet_src_dest quit;
+    quit.src = -1;
+    quit.dest = -1;
+
+    for(int j = 0; j < num_routers; j++){
+        if(send(router_info[j].tcp_port, &quit, sizeof(quit), 0)<0){
+            printf("Send failed.");
+            close(router_info[j].tcp_port);
+            exit(1);
+        }
+        char line[100];
+        sprintf(line, "Manager to Router %d: Quit\n", j);
+        mlog(line);
+    }
+
+    //======== Checkpoint 6 ========
+
 }
 
 //---------------------------- FILE PARSING ------------------------------------

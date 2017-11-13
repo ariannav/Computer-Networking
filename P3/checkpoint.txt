@@ -1,3 +1,4 @@
+================================== MANAGER =====================================
 Checkpoint      Occurence
 ________________________________________________________________________________
 1               - num_routers now contains the number of routers in the network.
@@ -8,4 +9,20 @@ ________________________________________________________________________________
                 - num_packets now contains the number of packets to be sent.
 ________________________________________________________________________________
 3               - Spawned N unit processes for each router.
+________________________________________________________________________________
+4               - All routers have responded and are ready to gather a link
+                  estimation.
+________________________________________________________________________________
+5               - Routers have been told to begin gathering edge topology info.
+                - Routers have created their forwarding table.
+                - Manager has received confirmation from all routers for both
+                  events.
+________________________________________________________________________________
+6               - Manager has send packet information to each source router.
+                - Manager has received a confirmation for each packet info
+                  received.
+                - Manager has told all routers to quit.
+________________________________________________________________________________
+7               - All routers have quit.
+                - Manager is now quitting. This is the end of the program.
 ________________________________________________________________________________

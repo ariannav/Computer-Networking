@@ -25,6 +25,7 @@ int tcp_to_router(int tcp_socket);
 void process_incoming_connection(int new_socket, int router_number);
 void all_routers_send(int* router_socket, char* message);
 void select_routers(int* router_socket, struct sockaddr_in router, socklen_t size);
+void all_routers_send_int(int* router_socket);
 void send_packet_information();
 
 //Class Variables
@@ -35,6 +36,7 @@ struct packet_src_dest packet[1000];
 int num_packets;
 FILE* log_file;
 int sockit;
+struct udp_port udp_port_list;
 
 int main(int argc, char* argv[]){
     //Check number of arguments.
@@ -145,19 +147,19 @@ void serve(){
 
     //======== Checkpoint 4 ========
     printf("Checkpoint 4 complete.\n");
-    mlog("All routers are ready.\n");
+    mlog("All routers are ready.");
 
     //All routers are ready.
-    all_routers_send(router_socket, "Send edge topology to neighbors.");
+    all_routers_send_int(router_socket);
     select_routers(router_socket, router, size);
-    mlog("All routers have sent edge topology information to neighbors.\n");
+    mlog("All routers have sent edge topology information to neighbors.");
     all_routers_send(router_socket, "Create forwarding table.");
     select_routers(router_socket, router, size);
-    mlog("All routers have created their routing table.\n");
+    mlog("All routers have created their routing table.");
 
     //======== Checkpoint 5 ========
     printf("Checkpoint 5 complete.\n");
-    mlog("Manager is ready to begin sending individual packet information.\n");
+    mlog("Manager is ready to begin sending individual packet information.");
 
     send_packet_information();
 }
@@ -238,6 +240,7 @@ void create_router(int router_number, int tcp_port, int udp_port){
     router_info[router_number].tcp_port = tcp_port;
     router_info[router_number].num_routers = num_routers;
     router_info[router_number].link = router_link[router_number];
+    udp_port_list.router[router_number] = udp_port;
 
     if(send(tcp_port, &router_info[router_number], sizeof(router_info[router_number]), 0)<0){
         printf("Send failed.");
@@ -284,7 +287,22 @@ void all_routers_send(int* router_socket, char* message){
             exit(1);
         }
         router_number = tcp_to_router(router_socket[i]);
-        sprintf(line, "Manager to Router %d: %s\n", router_number, message);
+        sprintf(line, "Manager to Router %d: %s", router_number, message);
+        mlog(line);
+    }
+}
+
+void all_routers_send_int(int* router_socket){
+    char line[100];
+    int router_number;
+    for(int i = 0; i < num_routers; i++){
+        if(send(router_socket[i], &udp_port_list, sizeof(udp_port_list), 0)<0){
+            printf("Send failed.");
+            close(router_socket[i]);
+            exit(1);
+        }
+        router_number = tcp_to_router(router_socket[i]);
+        sprintf(line, "Manager to Router %d: UDP port list.", router_number);
         mlog(line);
     }
 }
@@ -305,7 +323,7 @@ void send_packet_information(){
             exit(1);
         }
         char line[100];
-        sprintf(line, "Manager to Router %d: Send packet to router %d\n", source, packet[i].dest);
+        sprintf(line, "Manager to Router %d: Send packet to router %d", source, packet[i].dest);
         mlog(line);
 
         int received;
@@ -314,7 +332,7 @@ void send_packet_information(){
           close(source_socket);
           exit(1);
         }
-        sprintf(line, "Received confirmation from router %d.\n", source);
+        sprintf(line, "Received confirmation from router %d.", source);
         mlog(line);
     }
 
@@ -330,7 +348,7 @@ void send_packet_information(){
             exit(1);
         }
         char line[100];
-        sprintf(line, "Manager to Router %d: Quit\n", j);
+        sprintf(line, "Manager to Router %d: Quit", j);
         mlog(line);
     }
 

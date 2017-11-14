@@ -19,7 +19,7 @@ struct links{
 struct router_packet{
     int node_num;
     int udp_port;
-    int tcp_port; 
+    int tcp_port;
     int num_routers;
     struct links link;
 };
@@ -28,6 +28,10 @@ struct packet_src_dest{
     int src;
     int dest;
 };
+
+struct udp_port{
+    int router[100];
+}; 
 
 //Functions
 void get_ip(char* ip){

@@ -69,7 +69,9 @@ int main(int argc, char* argv[]){
 void spawn(){
     //Spawn number of routers
     int process_id[num_routers];
+    srand(time(NULL));
     for(int i = 0; i < num_routers; i++){
+        int port = rand();
         int id = fork();
 
         if(id < 0){
@@ -78,7 +80,9 @@ void spawn(){
         }
         else if(id == 0){ //Router process.
             char st_fd[8];
-            execlp("./router", st_fd, (char *)NULL);
+            char arg1[8];
+            sprintf(arg1, "%d", port);
+            execlp("./router", arg1, st_fd, (char *)NULL);
         }
         else{
             char line[100];
@@ -146,7 +150,7 @@ void serve(){
     select_routers(router_socket, router, size);
 
     //======== Checkpoint 4 ========
-    printf("Checkpoint 4 complete.\n");
+    printf("Checkpoint 4 complete.\n"); fflush(stdout);
     mlog("All routers are ready.");
 
     //All routers are ready.
@@ -240,7 +244,11 @@ void create_router(int router_number, int tcp_port, int udp_port){
     router_info[router_number].tcp_port = tcp_port;
     router_info[router_number].num_routers = num_routers;
     router_info[router_number].link = router_link[router_number];
-    udp_port_list.router[router_number] = udp_port;
+    //udp_port_list.router[router_number] = udp_port;
+
+    char line[100];
+    sprintf(line, "Router %d has UDP port number: %d", router_number, udp_port);
+    mlog(line);
 
     if(send(tcp_port, &router_info[router_number], sizeof(router_info[router_number]), 0)<0){
         printf("Send failed.");
@@ -263,7 +271,7 @@ void process_incoming_connection(int new_socket, int router_number){
     //Receiving UDP port number.
     int udp_port;
     if(recv(new_socket, &udp_port, sizeof(int), MSG_WAITALL) < 0){
-      printf("Could not receive packet from last ss. Exiting program.\n");
+      printf("Could not receive packet from incoming router. Exiting program.\n");
       close(new_socket);
       exit(1);
     }
@@ -293,6 +301,12 @@ void all_routers_send(int* router_socket, char* message){
 }
 
 void all_routers_send_int(int* router_socket){
+    for(int j = 0; j < num_routers; j++){
+        udp_port_list.router[j] = router_info[j].udp_port;
+        printf("UDP port list [%d]: %d\n", j, router_info[j].udp_port);
+    }
+
+
     char line[100];
     int router_number;
     for(int i = 0; i < num_routers; i++){
@@ -302,7 +316,7 @@ void all_routers_send_int(int* router_socket){
             exit(1);
         }
         router_number = tcp_to_router(router_socket[i]);
-        sprintf(line, "Manager to Router %d: UDP port list.", router_number);
+        sprintf(line, "Manager to Router %d: Begin creating links to neighbors.", router_number);
         mlog(line);
     }
 }

@@ -36,7 +36,7 @@ struct packet_src_dest packet[1000];
 int num_packets;
 FILE* log_file;
 int sockit;
-struct udp_port udp_port_list;
+int udp_ports[100];
 
 int main(int argc, char* argv[]){
     //Check number of arguments.
@@ -244,17 +244,11 @@ void create_router(int router_number, int tcp_port, int udp_port){
     router_info[router_number].tcp_port = tcp_port;
     router_info[router_number].num_routers = num_routers;
     router_info[router_number].link = router_link[router_number];
-    //udp_port_list.router[router_number] = udp_port;
 
     char line[100];
     sprintf(line, "Router %d has UDP port number: %d", router_number, udp_port);
     mlog(line);
 
-    if(send(tcp_port, &router_info[router_number], sizeof(router_info[router_number]), 0)<0){
-        printf("Send failed.");
-        close(tcp_port);
-        exit(1);
-    }
 }
 
 //Takes a tcp socket number and generates a router number.
@@ -302,15 +296,15 @@ void all_routers_send(int* router_socket, char* message){
 
 void all_routers_send_int(int* router_socket){
     for(int j = 0; j < num_routers; j++){
-        udp_port_list.router[j] = router_info[j].udp_port;
-        printf("UDP port list [%d]: %d\n", j, router_info[j].udp_port);
+        udp_ports[j] = router_info[j].udp_port;
+        printf("UDP port list [%d]: %d\n", j, udp_ports[j]);
     }
 
 
     char line[100];
     int router_number;
     for(int i = 0; i < num_routers; i++){
-        if(send(router_socket[i], &udp_port_list, sizeof(udp_port_list), 0)<0){
+        if(send(router_socket[i], &udp_ports, 100, 0)<0){
             printf("Send failed.");
             close(router_socket[i]);
             exit(1);
@@ -382,6 +376,7 @@ void parse_file(char* filename){
     if(fscanf(fptr, "%d", &num_routers) == 0){ bad_file(fptr); }
     for(int i = 0; i < num_routers; i++){
         router_link[i].num_edges = 0;
+        router_info[i].num_neighbors = 0;
     }
 
     //Parsing the list of links.
@@ -398,6 +393,7 @@ void parse_file(char* filename){
 
             fscanf(fptr, "%d", &curr);
             router_link[num].dest[edge] = curr;
+            router_info[curr].num_neighbors++; 
             fscanf(fptr, "%d", &curr);
             router_link[num].cost[edge] = curr;
             router_link[num].num_edges++;

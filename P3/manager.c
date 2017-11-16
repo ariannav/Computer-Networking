@@ -219,7 +219,7 @@ void select_routers(int* router_socket, struct sockaddr_in router, socklen_t siz
             if(FD_ISSET(sd, &readfds)){
                 int status;
                 if(recv(sd, &status, sizeof(status), MSG_WAITALL) < 0){
-                  printf("Could not receive packet from router. Exiting program.\n");
+                  printf("Could not receive packet from router 1. Exiting program.\n");
                   close(new_socket);
                   exit(1);
                 }
@@ -266,7 +266,7 @@ void process_incoming_connection(int new_socket, int router_number){
     //Receiving UDP port number.
     int udp_port;
     if(recv(new_socket, &udp_port, sizeof(int), MSG_WAITALL) < 0){
-      printf("Could not receive packet from incoming router. Exiting program.\n");
+      printf("Could not receive packet from incoming router 2. Exiting program.\n");
       close(new_socket);
       exit(1);
     }
@@ -331,7 +331,7 @@ void send_packet_information(){
 
         int received;
         if(recv(source_socket, &received, sizeof(int), MSG_WAITALL) < 0){
-          printf("Could not receive packet from last ss. Exiting program.\n");
+          printf("Could not receive packet from last ss 3. Exiting program.\n");
           close(source_socket);
           exit(1);
         }
@@ -432,7 +432,7 @@ void mlog(char* usr_message){
 
 //----------------------------- SIGNAL -----------------------------------------
 void sighandler(int sig){
-    printf(" Exiting program.\n");
+    printf("Exiting program.\n");
     fclose(log_file);
     exit(1);
 }

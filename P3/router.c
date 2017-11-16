@@ -42,8 +42,6 @@ int main(int argc, char* argv[]){
         udp_port = (rand() % 8980) + 1015;
     }while(udp_port == 7014);
 
-    printf("My port: %d.\n", udp_port);
-
     client_connect(udp_port);
 }
 
@@ -103,11 +101,13 @@ void client_connect(int udp_port){
         exit(1);
     }
 
-    if(recv(sockit, &udp_ports, 100, MSG_WAITALL) < 0){
+    if(recv(sockit, &udp_ports, sizeof(udp_ports), MSG_WAITALL) < 0){
         printf("Could not receive packet from manager. Exiting program.\n");
         close(sockit);
         exit(1);
     }
+
+    printf("Router %d UDP[0]: %d, UDP[1]: %d, UDP[2]: %d.\n", me.node_num, udp_ports[0], udp_ports[1], udp_ports[2]);
 
     int master = router_initial_contact();
 
@@ -396,11 +396,11 @@ void output_routing_table(int* previous){
     fwrite(line, sizeof(char), strlen(line), log_file);
 
     for(int i = 0; i< me.num_routers; i++){
-        sprintf(line, "|\t%d\t|\t%d\t|\n", i, rt.next_node[i]);
+        sprintf(line, "|\t%d\t\t|\t%d\t\t|\n", i, rt.next_node[i]);
         fwrite(line, sizeof(char), strlen(line), log_file);
     }
 
-    sprintf(line, "\t------\t\t------\t\n");
+    sprintf(line, "\t------\t\t\t------\t\n");
     fwrite(line, sizeof(char), strlen(line), log_file);
 }
 

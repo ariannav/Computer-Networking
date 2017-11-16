@@ -244,6 +244,7 @@ void create_router(int router_number, int tcp_port, int udp_port){
     router_info[router_number].tcp_port = tcp_port;
     router_info[router_number].num_routers = num_routers;
     router_info[router_number].link = router_link[router_number];
+    udp_ports[router_number] = udp_port;
 
     char line[100];
     sprintf(line, "Router %d has UDP port number: %d", router_number, udp_port);
@@ -295,16 +296,14 @@ void all_routers_send(int* router_socket, char* message){
 }
 
 void all_routers_send_int(int* router_socket){
-    for(int j = 0; j < num_routers; j++){
-        udp_ports[j] = router_info[j].udp_port;
-        printf("UDP port list [%d]: %d\n", j, udp_ports[j]);
+    for(int i = 0; i<num_routers; i++){
+        printf("UDP port[%d]: %d\n", i, udp_ports[i]);
     }
-
 
     char line[100];
     int router_number;
     for(int i = 0; i < num_routers; i++){
-        if(send(router_socket[i], &udp_ports, 100, 0)<0){
+        if(send(router_socket[i], &udp_ports, sizeof(udp_ports), 0)<0){
             printf("Send failed.");
             close(router_socket[i]);
             exit(1);
@@ -317,10 +316,6 @@ void all_routers_send_int(int* router_socket){
 
 //-------------------------- SENDING PACKET INFO -------------------------------
 void send_packet_information(){
-    // struct router_packet router_info[100];
-    // int num_routers;
-    // struct packet_src_dest packet[1000];
-    // int num_packets;
 
     for(int i = 0; i < num_packets; i++){
         int source = packet[i].src;
@@ -393,7 +388,7 @@ void parse_file(char* filename){
 
             fscanf(fptr, "%d", &curr);
             router_link[num].dest[edge] = curr;
-            router_info[curr].num_neighbors++; 
+            router_info[curr].num_neighbors++;
             fscanf(fptr, "%d", &curr);
             router_link[num].cost[edge] = curr;
             router_link[num].num_edges++;

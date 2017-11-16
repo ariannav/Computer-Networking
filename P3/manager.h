@@ -16,22 +16,29 @@ struct links{
     int cost[100];
 };
 
+struct lsp{
+    int node_num;
+    struct links link;
+    int s_num;
+};
+
 struct router_packet{
     int node_num;
     int udp_port;
     int tcp_port;
     int num_routers;
+    int num_neighbors;
     struct links link;
+};
+
+struct routing_table{
+    int next_node[100]; 
 };
 
 struct packet_src_dest{
     int src;
     int dest;
 };
-
-struct udp_port{
-    int router[100];
-}; 
 
 //Functions
 void get_ip(char* ip){

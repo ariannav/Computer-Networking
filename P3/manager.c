@@ -61,6 +61,7 @@ int main(int argc, char* argv[]){
 
     //======== Checkpoint 7 ========
     mlog("Goodbye!\n");
+    fclose(log_file); 
 
 }
 

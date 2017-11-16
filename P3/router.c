@@ -11,6 +11,7 @@
 #include <time.h>
 #include <signal.h>
 #include <limits.h>
+#include <errno.h>
 #include "manager.h"
 
 void client_connect(int udp_port);
@@ -30,6 +31,7 @@ int udp_ports[100];
 struct links all_edges[100];
 struct routing_table rt;
 FILE* log_file;
+int udp_s;
 
 int main(int argc, char* argv[]){
     //Get IP
@@ -37,9 +39,29 @@ int main(int argc, char* argv[]){
 
     //Get UDP port.
     int udp_port;
+    srand(atoi(argv[0]));
     do{
-        srand(atoi(argv[0]));
         udp_port = (rand() % 8980) + 1015;
+
+        struct sockaddr_in si_me;
+
+        //create a UDP socket
+        if ((udp_s=socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP)) == -1){
+            printf("Router %d: Parent socket in initial contact failed.\n", me.node_num);
+            exit(1);
+        }
+
+        // zero out the structure
+        memset((char *) &si_me, 0, sizeof(si_me));
+
+        si_me.sin_family = AF_INET;
+        si_me.sin_port = htons(udp_port);
+        si_me.sin_addr.s_addr = inet_addr(ip);
+
+        //bind socket to port
+        if( bind(udp_s, (struct sockaddr*)&si_me, sizeof(si_me)) == -1){
+            udp_port = 7014;
+        }
     }while(udp_port == 7014);
 
     client_connect(udp_port);
@@ -170,7 +192,7 @@ int router_initial_contact(){
             si_other.sin_family = AF_INET;
             si_other.sin_addr.s_addr = inet_addr(ip);
             si_other.sin_port = htons(udp_ports[me.link.dest[i]]);
-            printf("Router %d is contacting router %d on their port %d.\n", me.node_num, me.link.dest[i], udp_ports[me.link.dest[i]]);
+            printf("Link est: Router %d is contacting router %d on their port %d.\n", me.node_num, me.link.dest[i], udp_ports[me.link.dest[i]]);
 
             int buf = 1;
             if (sendto(s, &buf, sizeof(int), 0, (struct sockaddr *) &si_other, slen) == -1){
@@ -188,40 +210,21 @@ int router_initial_contact(){
     }
 
 
-    struct sockaddr_in si_me, si_other;
-    int s;
+    struct sockaddr_in si_other;
     socklen_t slen = sizeof(si_other);
 
-    //create a UDP socket
-    if ((s=socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP)) == -1){
-        printf("Router %d: Parent socket in initial contact failed.\n", me.node_num);
-        exit(1);
-    }
-
-    // zero out the structure
-    memset((char *) &si_me, 0, sizeof(si_me));
-
-    si_me.sin_family = AF_INET;
-    si_me.sin_port = htons(me.udp_port);
-    si_me.sin_addr.s_addr = htonl(INADDR_ANY);
-
-    //bind socket to port
-    if( bind(s, (struct sockaddr*)&si_me, sizeof(si_me)) == -1){
-        printf("Router %d: Parent bind failed in initial contact.\n", me.node_num);
-        exit(1);
-    }
 
     for(int i = 0; i < me.num_neighbors; i++){
         int request = 1;
 
         //printf("Router %d, waiting to hear something.\n", me.node_num);
-        if(recvfrom(s, &request, sizeof(int), 0, (struct sockaddr *) &si_other, &slen) == -1){
+        if(recvfrom(udp_s, &request, sizeof(int), 0, (struct sockaddr *) &si_other, &slen) == -1){
             printf("Router %d: Initial contact, parent, cannot receive.\n", me.node_num);
             exit(1);
         }
 
         //printf("Router %d: Received something!\n", me.node_num);
-        if(sendto(s, &request, sizeof(int), 0, (struct sockaddr *) &si_other, slen) == -1){
+        if(sendto(udp_s, &request, sizeof(int), 0, (struct sockaddr *) &si_other, slen) == -1){
             printf("Router %d: Initial contact, parent, cannot send back.\n", me.node_num);
             exit(1);
         }
@@ -230,7 +233,7 @@ int router_initial_contact(){
     //Wait for routers to exit.
     int status;
     waitpid(id, &status, 0);
-    return(s);
+    return(udp_s);
     //Tell manager we are done!
 }
 
@@ -263,7 +266,7 @@ void router_secondary_contact(int master){
             si_other.sin_family = AF_INET;
             si_other.sin_addr.s_addr = inet_addr(ip);
             si_other.sin_port = htons(udp_ports[me.link.dest[i]]);
-            printf("Router %d is contacting router %d on their port %d.\n", me.node_num, me.link.dest[i], udp_ports[me.link.dest[i]]);
+            printf("LSP send: Router %d is contacting router %d on their port %d.\n", me.node_num, me.link.dest[i], udp_ports[me.link.dest[i]]);
 
             r_lsp.s_num++;
             if (sendto(s, &r_lsp, sizeof(r_lsp), 0, (struct sockaddr *) &si_other, slen) == -1){
@@ -308,7 +311,7 @@ void router_secondary_contact(int master){
         }
         //else: Throw away. Keep going.
     }
-
+    printf("Router %d: Done accepting LSP packets!\n", me.node_num); 
     //Wait for routers to exit.
     int status;
     waitpid(id, &status, 0);
@@ -332,7 +335,7 @@ void forward(struct lsp f_lsp, int r_port, int s){
             printf("Router %d is forwarding lsp from router %d to router %d.\n", me.node_num, f_lsp.node_num, me.link.dest[i]);
 
             if(sendto(s, &f_lsp, sizeof(f_lsp), 0, (struct sockaddr *) &si_other, slen) == -1){
-                printf("Router %d: Forwarding failed.\n", me.node_num);
+                printf("Router %d: Forwarding failed. %s\n", me.node_num, strerror(errno));
                 exit(1);
             }
         }

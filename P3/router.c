@@ -32,6 +32,7 @@ struct links all_edges[100];
 struct routing_table rt;
 FILE* log_file;
 int udp_s;
+int distance[100];
 
 int main(int argc, char* argv[]){
     //Get IP
@@ -368,7 +369,6 @@ void forward(struct lsp f_lsp, int r_port, int s){
 
 void run_dijkstras(){
     mlog("Beginning dijkstras' algorithm.");
-    int distance[me.num_routers];
     int previous[me.num_routers];
     int rem_nodes[me.num_routers];
 
@@ -406,7 +406,7 @@ void run_dijkstras(){
     //rt contains next_node[100]. next_node[i] => i = destination, next_node[i] = next node to forward to.
     for(int r = 0; r < me.num_routers; r++){
         if(r == me.node_num){
-            rt.next_node[r] = me.node_num; 
+            rt.next_node[r] = me.node_num;
             continue;
         }
         else{
@@ -428,15 +428,15 @@ int find_prev(int curr, int* previous){
 
 void output_routing_table(int* previous){
     char line[200];
-    sprintf(line, "Routing table: \n|\tDestination\t|\tNext Node\t|\n");
+    sprintf(line, "Routing table: \n|\tDestination\t|\tNext Node\t|\tTotal Distance\t|\n");
     fwrite(line, sizeof(char), strlen(line), log_file);
 
     for(int i = 0; i< me.num_routers; i++){
-        sprintf(line, "|\t%d\t\t\t|\t%d\t\t\t|\n", i, rt.next_node[i]);
+        sprintf(line, "|\t%d\t\t\t|\t%d\t\t\t|\t%d\t\t\t|\n", i, rt.next_node[i], distance[i]);
         fwrite(line, sizeof(char), strlen(line), log_file);
     }
 
-    sprintf(line, "\t------\t\t\t------\t\n");
+    sprintf(line, "\t------\t\t\t------\t\t\t------\n");
     fwrite(line, sizeof(char), strlen(line), log_file);
 }
 

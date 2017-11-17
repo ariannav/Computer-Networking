@@ -61,7 +61,8 @@ int main(int argc, char* argv[]){
 
     //======== Checkpoint 7 ========
     mlog("Goodbye!\n");
-    fclose(log_file); 
+    printf("All done!\n"); 
+    fclose(log_file);
 
 }
 
@@ -96,6 +97,7 @@ void spawn(){
     //======== Checkpoint 3 ========
     printf("Checkpoint 3 complete.\n");
     serve();
+    fflush(log_file);
 
     //Wait for routers to exit.
     for(int i = 0; i < num_routers; i++){
@@ -103,7 +105,7 @@ void spawn(){
         waitpid(process_id[i], &status, 0);
     }
 
-    mlog("All routers have quit, Manager is quitting now.\n");
+    mlog("All routers have quit, Manager is quitting now.");
 }
 
 void serve(){
@@ -153,6 +155,7 @@ void serve(){
     //======== Checkpoint 4 ========
     printf("Checkpoint 4 complete.\n"); fflush(stdout);
     mlog("All routers are ready.");
+    fflush(log_file);
 
     //All routers are ready.
     all_routers_send_int(router_socket);
@@ -165,7 +168,7 @@ void serve(){
     //======== Checkpoint 5 ========
     printf("Checkpoint 5 complete.\n");
     mlog("Manager is ready to begin sending individual packet information.");
-
+    fflush(log_file);
     send_packet_information();
 }
 
@@ -297,9 +300,9 @@ void all_routers_send(int* router_socket, char* message){
 }
 
 void all_routers_send_int(int* router_socket){
-    for(int i = 0; i<num_routers; i++){
-        printf("UDP port[%d]: %d\n", i, udp_ports[i]);
-    }
+    // for(int i = 0; i<num_routers; i++){
+    //     printf("UDP port[%d]: %d\n", i, udp_ports[i]);
+    // }
 
     char line[100];
     int router_number;
@@ -357,7 +360,8 @@ void send_packet_information(){
     }
 
     //======== Checkpoint 6 ========
-
+    fflush(log_file);
+    printf("Checkpoint 6 complete.\n");
 }
 
 //---------------------------- FILE PARSING ------------------------------------
@@ -393,11 +397,21 @@ void parse_file(char* filename){
             fscanf(fptr, "%d", &curr);
             router_link[num].cost[edge] = curr;
             router_link[num].num_edges++;
+
+            //Other direction
+            int src = router_link[num].dest[edge];
+            int dest = num;
+            int cost = router_link[num].cost[edge];
+            edge = router_link[src].num_edges;
+            router_link[src].dest[edge] = dest;
+            router_info[num].num_neighbors++;
+            router_link[src].cost[edge] = cost;
+            router_link[src].num_edges++;
         }
     }
 
     //======== Checkpoint 1 ========
-
+    fflush(log_file);
     //Parse packet source/destination pairs.
     if(fscanf(fptr, "%d", &curr) == 0){ bad_file(fptr); }
     int num_packets = 0;
@@ -412,6 +426,7 @@ void parse_file(char* filename){
 
     //======== Checkpoint 2 ========
     fclose(fptr);
+    fflush(log_file);
 }
 
 //Produces error message when file is incorrectly formatted.

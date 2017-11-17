@@ -32,7 +32,7 @@ struct router_packet{
 };
 
 struct routing_table{
-    int next_node[100]; 
+    int next_node[100];
 };
 
 struct packet_src_dest{

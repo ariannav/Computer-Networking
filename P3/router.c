@@ -36,6 +36,7 @@ int udp_s;
 int main(int argc, char* argv[]){
     //Get IP
     get_ip(ip);
+    //strcpy(ip, "127.0.0.1");
 
     //Get UDP port.
     int udp_port;
@@ -115,6 +116,9 @@ void client_connect(int udp_port){
     char file_name[30];
     sprintf(file_name, "router%d.out", me.node_num);
     log_file = fopen(file_name,"wb");
+    char line[100];
+    sprintf(line, "Router number: %d, UDP port: %d, Number of edges: %d.", me.node_num, me.udp_port, me.link.num_edges);
+    mlog(line);
 
     //Sending ready to manager
     int ready = 1;
@@ -123,6 +127,7 @@ void client_connect(int udp_port){
         close(sockit);
         exit(1);
     }
+    mlog("Telling manager I am ready.");
 
     //Receive UDP ports from neighbors.
     if(recv(sockit, &udp_ports, sizeof(udp_ports), MSG_WAITALL) < 0){
@@ -130,6 +135,7 @@ void client_connect(int udp_port){
         close(sockit);
         exit(1);
     }
+    mlog("Received acknowledgement. Commencing link establishment.");
 
     //printf("Router %d UDP[0]: %d, UDP[1]: %d, UDP[2]: %d.\n", me.node_num, udp_ports[0], udp_ports[1], udp_ports[2]);
     //Make first contact, establish links with neighbors.
@@ -141,6 +147,7 @@ void client_connect(int udp_port){
         close(sockit);
         exit(1);
     }
+    mlog("Telling manager I am ready to make routing table.");
 
     //Receive ready signal. Next, we should make routing table.
     if(recv(sockit, &ready, sizeof(int), MSG_WAITALL) < 0){
@@ -148,6 +155,7 @@ void client_connect(int udp_port){
         close(sockit);
         exit(1);
     }
+    mlog("Received acknowledgement. Commencing LSP sending, dijkstras, and creating forwarding table.");
 
     //Send LSP to neighbors and have them forwarded.
     router_secondary_contact(master);
@@ -162,14 +170,19 @@ void client_connect(int udp_port){
         close(sockit);
         exit(1);
     }
+    mlog("Telling manager I am ready to send packets.");
 
     send_packet(master, sockit);
+
+    mlog("I have finished forwarding and receiving packets.");
+    mlog("Goodbye!");
 
     close(sockit);
     fclose(log_file);
 }
 
 int router_initial_contact(){
+    fflush(log_file);
     int id = fork();
 
     if(id < 0){
@@ -185,26 +198,28 @@ int router_initial_contact(){
             printf("Router %d: Can't make socket in child for initial contact.\n", me.node_num);
             exit(1);
         }
-
+        char line[100];
         for(int i = 0; i < me.link.num_edges; i++){
 
             memset((char *) &si_other, 0, sizeof(si_other));
             si_other.sin_family = AF_INET;
             si_other.sin_addr.s_addr = inet_addr(ip);
             si_other.sin_port = htons(udp_ports[me.link.dest[i]]);
-            printf("Link est: Router %d is contacting router %d on their port %d.\n", me.node_num, me.link.dest[i], udp_ports[me.link.dest[i]]);
 
             int buf = 1;
             if (sendto(s, &buf, sizeof(int), 0, (struct sockaddr *) &si_other, slen) == -1){
                 printf("Router %d: Child send from initial contact failed.\n", me.node_num);
                 exit(1);
             }
+            sprintf(line, "Contacting router %d on port %d.", me.link.dest[i], udp_ports[me.link.dest[i]]);
+            mlog(line);
 
             if (recvfrom(s, &buf, sizeof(int), 0, (struct sockaddr *) &si_other, &slen) == -1){
                 printf("Router %d: Child receive during initial contact failed.\n", me.node_num);
                 exit(1);
             }
-            printf("Router %d: Received acknowledgement from router %d.\n", me.node_num, me.link.dest[i]);
+            sprintf(line,"Received acknowledgement from router %d.", me.link.dest[i]);
+            mlog(line);
         }
         exit(0);
     }
@@ -213,15 +228,14 @@ int router_initial_contact(){
     struct sockaddr_in si_other;
     socklen_t slen = sizeof(si_other);
 
-
     for(int i = 0; i < me.num_neighbors; i++){
         int request = 1;
 
-        //printf("Router %d, waiting to hear something.\n", me.node_num);
         if(recvfrom(udp_s, &request, sizeof(int), 0, (struct sockaddr *) &si_other, &slen) == -1){
             printf("Router %d: Initial contact, parent, cannot receive.\n", me.node_num);
             exit(1);
         }
+        mlog("Received link request.");
 
         //printf("Router %d: Received something!\n", me.node_num);
         if(sendto(udp_s, &request, sizeof(int), 0, (struct sockaddr *) &si_other, slen) == -1){
@@ -233,11 +247,13 @@ int router_initial_contact(){
     //Wait for routers to exit.
     int status;
     waitpid(id, &status, 0);
+    mlog("Link establishment complete.");
     return(udp_s);
     //Tell manager we are done!
 }
 
 void router_secondary_contact(int master){
+    fflush(log_file);
     int id = fork();
 
     if(id < 0){
@@ -259,6 +275,7 @@ void router_secondary_contact(int master){
         r_lsp.node_num = me.node_num;
         r_lsp.link = me.link;
         r_lsp.s_num = -1;
+        char line[100];
 
         for(int i = 0; i < me.link.num_edges; i++){
 
@@ -266,7 +283,8 @@ void router_secondary_contact(int master){
             si_other.sin_family = AF_INET;
             si_other.sin_addr.s_addr = inet_addr(ip);
             si_other.sin_port = htons(udp_ports[me.link.dest[i]]);
-            printf("LSP send: Router %d is contacting router %d on their port %d.\n", me.node_num, me.link.dest[i], udp_ports[me.link.dest[i]]);
+            sprintf(line, "LSP: send to router %d on their port %d.", me.link.dest[i], udp_ports[me.link.dest[i]]);
+            mlog(line);
 
             r_lsp.s_num++;
             if (sendto(s, &r_lsp, sizeof(r_lsp), 0, (struct sockaddr *) &si_other, slen) == -1){
@@ -289,7 +307,7 @@ void router_secondary_contact(int master){
     }
 
     all_edges[me.node_num] = me.link;
-
+    char line[100];
     while(num_recieved != me.num_routers-1){
 
         //Received LSP from another router
@@ -297,6 +315,8 @@ void router_secondary_contact(int master){
             printf("Router %d: Failed to receive from other router in parent, secondary contact.\n", me.node_num);
             exit(1);
         }
+        sprintf(line, "Received lsp from router %d.",o_lsp.node_num);
+        mlog(line);
 
         if(all_edges[o_lsp.node_num].num_edges == 0){   //First LSP from this router.
             all_edges[o_lsp.node_num] = o_lsp.link;
@@ -311,7 +331,7 @@ void router_secondary_contact(int master){
         }
         //else: Throw away. Keep going.
     }
-    printf("Router %d: Done accepting LSP packets!\n", me.node_num); 
+    mlog("Finished accepting LSP packets!");
     //Wait for routers to exit.
     int status;
     waitpid(id, &status, 0);
@@ -322,6 +342,7 @@ void router_secondary_contact(int master){
 void forward(struct lsp f_lsp, int r_port, int s){
     struct sockaddr_in si_other;
     socklen_t slen = sizeof(si_other);
+    char line[100];
 
     for(int i = 0; i < me.link.num_edges; i++){
 
@@ -332,17 +353,21 @@ void forward(struct lsp f_lsp, int r_port, int s){
 
 
         if(si_other.sin_port != r_port && f_lsp.node_num != me.link.dest[i]){
-            printf("Router %d is forwarding lsp from router %d to router %d.\n", me.node_num, f_lsp.node_num, me.link.dest[i]);
+            sprintf(line, "Forwarding lsp from router %d to router %d.", f_lsp.node_num, me.link.dest[i]);
+            mlog(line);
+            fflush(log_file);
 
             if(sendto(s, &f_lsp, sizeof(f_lsp), 0, (struct sockaddr *) &si_other, slen) == -1){
-                printf("Router %d: Forwarding failed. %s\n", me.node_num, strerror(errno));
-                exit(1);
+                //Doesn't matter if this fails, because that means the receiving router has received LSPs from all routers.
+                //printf("Router %d: Forwarding failed. %s\n", me.node_num, strerror(errno));
+                //exit(1);
             }
         }
     }
 }
 
 void run_dijkstras(){
+    mlog("Beginning dijkstras' algorithm.");
     int distance[me.num_routers];
     int previous[me.num_routers];
     int rem_nodes[me.num_routers];
@@ -381,15 +406,14 @@ void run_dijkstras(){
     //rt contains next_node[100]. next_node[i] => i = destination, next_node[i] = next node to forward to.
     for(int r = 0; r < me.num_routers; r++){
         if(r == me.node_num){
+            rt.next_node[r] = me.node_num; 
             continue;
         }
         else{
             rt.next_node[r] = find_prev(r, previous);
         }
     }
-    for(int z = 0; z < me.num_routers; z++){
-        printf("Router %d: Previous [%d] = %d\n",me.node_num, z, previous[z]);
-    }
+    mlog("Finished dijkstras'. Created forwarding table.");
     //Routing table created.
 }
 
@@ -404,11 +428,11 @@ int find_prev(int curr, int* previous){
 
 void output_routing_table(int* previous){
     char line[200];
-    sprintf(line, "Shortest Path table: \n|\tDestination\t|\tNext Node\t|\n");
+    sprintf(line, "Routing table: \n|\tDestination\t|\tNext Node\t|\n");
     fwrite(line, sizeof(char), strlen(line), log_file);
 
     for(int i = 0; i< me.num_routers; i++){
-        sprintf(line, "|\t%d\t\t|\t%d\t\t|\n", i, rt.next_node[i]);
+        sprintf(line, "|\t%d\t\t\t|\t%d\t\t\t|\n", i, rt.next_node[i]);
         fwrite(line, sizeof(char), strlen(line), log_file);
     }
 
@@ -417,6 +441,7 @@ void output_routing_table(int* previous){
 }
 
 void send_packet(int master, int sockit){
+    fflush(log_file);
     int id = fork();
 
     if(id < 0){
@@ -442,8 +467,7 @@ void send_packet(int master, int sockit){
         }
         while(packet.dest != -1){
             if(packet.dest == me.node_num){
-                sprintf(line, "Router %d: Received packet from manager for me.", me.node_num);
-                mlog(line);
+                mlog("Received packet from manager for me.");
                 continue;
             }
 
@@ -452,7 +476,7 @@ void send_packet(int master, int sockit){
             si_other.sin_addr.s_addr = inet_addr(ip);
             si_other.sin_port = htons(udp_ports[rt.next_node[packet.dest]]);
 
-            sprintf(line, "Sending packet to router %d via router %d.", packet.dest, rt.next_node[packet.dest]);
+            sprintf(line, "Got packet from manager. Sending packet to router %d via router %d.", packet.dest, rt.next_node[packet.dest]);
             mlog(line);
 
             if (sendto(s, &packet, sizeof(packet), 0, (struct sockaddr *) &si_other, slen) == -1){
@@ -514,17 +538,16 @@ void alert(int s){
     struct sockaddr_in si_other;
     socklen_t slen = sizeof(si_other);
     struct packet_src_dest packet;
-    packet.src = -1;
+    packet.src = me.node_num;
     packet.dest = -1;
 
+    mlog("Telling neighbors there are no more packets from me.");
     for(int i = 0; i < me.num_routers; i++){
 
         memset((char *) &si_other, 0, sizeof(si_other));
         si_other.sin_family = AF_INET;
         si_other.sin_addr.s_addr = inet_addr(ip);
         si_other.sin_port = htons(udp_ports[i]);
-
-        mlog("Telling neighbors there are no more packets from me.\n");
 
         if(i == me.node_num){
             continue;

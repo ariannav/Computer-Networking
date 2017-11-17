@@ -2,6 +2,7 @@
 //Author: Arianna Vacca
 //CS457 P3
 
+//Includes
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -14,6 +15,7 @@
 #include <errno.h>
 #include "manager.h"
 
+//Functions
 void client_connect(int udp_port);
 int router_initial_contact();
 void router_secondary_contact(int master);
@@ -25,6 +27,7 @@ void mlog(char* usr_message);
 void send_packet(int master, int sockit);
 void alert(int s);
 
+//Class Variables
 struct router_packet me;
 char ip[50];
 int udp_ports[100];
@@ -150,6 +153,7 @@ void client_connect(int udp_port){
         close(sockit);
         exit(1);
     }
+    fflush(log_file);
     mlog("Telling manager I am ready to make routing table.");
 
     //Receive ready signal. Next, we should make routing table.
@@ -243,7 +247,7 @@ int router_initial_contact(){
             printf("Router %d: Initial contact, parent, cannot receive.\n", me.node_num);
             exit(1);
         }
-        mlog("Received link request.");
+        mlog("Received link request from neighbor.");
 
         //printf("Router %d: Received something!\n", me.node_num);
         if(sendto(udp_s, &request, sizeof(int), 0, (struct sockaddr *) &si_other, slen) == -1){
@@ -323,7 +327,7 @@ void router_secondary_contact(int master){
             printf("Router %d: Failed to receive from other router in parent, secondary contact.\n", me.node_num);
             exit(1);
         }
-        sprintf(line, "Received lsp from router %d.",o_lsp.node_num);
+        sprintf(line, "Received lsp from router %d via neighbor.",o_lsp.node_num);
         mlog(line);
 
         if(all_edges[o_lsp.node_num].num_edges == 0){   //First LSP from this router.
@@ -435,15 +439,15 @@ int find_prev(int curr, int* previous){
 
 void output_routing_table(int* previous){
     char line[200];
-    sprintf(line, "Routing table: \n|\tDestination\t|\tNext Node\t|\tTotal Distance\t|\n");
+    sprintf(line, "\tRouting table: \n\t|\tDestination\t|\tNext Node\t|\tTotal Distance\t|\n");
     fwrite(line, sizeof(char), strlen(line), log_file);
 
     for(int i = 0; i< me.num_routers; i++){
-        sprintf(line, "|\t%d\t\t\t|\t%d\t\t\t|\t%d\t\t\t|\n", i, rt.next_node[i], distance[i]);
+        sprintf(line, "\t|\t%d\t\t\t|\t%d\t\t\t|\t%d\t\t\t\t|\n", i, rt.next_node[i], distance[i]);
         fwrite(line, sizeof(char), strlen(line), log_file);
     }
 
-    sprintf(line, "\t------\t\t\t------\t\t\t------\n");
+    sprintf(line, "\t\t------\t\t\t------\t\t\t------\n");
     fwrite(line, sizeof(char), strlen(line), log_file);
 }
 

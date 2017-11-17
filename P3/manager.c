@@ -29,7 +29,7 @@ void all_routers_send_int(int* router_socket);
 void send_packet_information(int* router_socket);
 
 //Class Variables
-struct links router_link[100];
+struct links router_link[1000];
 struct router_packet router_info[100];
 int num_routers;
 struct packet_src_dest packet[1000];
@@ -300,7 +300,7 @@ void all_routers_send(int* router_socket){
             exit(1);
         }
         router_number = tcp_to_router(router_socket[i]);
-        sprintf(line, "Manager to Router %d: , Create forwarding table.", router_number);
+        sprintf(line, "Manager to Router %d: Create forwarding table.", router_number);
         mlog(line);
     }
 }

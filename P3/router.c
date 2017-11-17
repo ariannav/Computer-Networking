@@ -33,6 +33,8 @@ struct routing_table rt;
 FILE* log_file;
 int udp_s;
 int distance[100];
+struct packet_src_dest confirmation[1000];
+int confirm;
 
 int main(int argc, char* argv[]){
     //Get IP
@@ -151,7 +153,12 @@ void client_connect(int udp_port){
     mlog("Telling manager I am ready to make routing table.");
 
     //Receive ready signal. Next, we should make routing table.
-    if(recv(sockit, &ready, sizeof(int), MSG_WAITALL) < 0){
+    if(recv(sockit, &confirmation, sizeof(confirmation), MSG_WAITALL) < 0){
+        printf("Router %d: could not receive ready signal from manager to make routing table.\n", me.node_num);
+        close(sockit);
+        exit(1);
+    }
+    if(recv(sockit, &confirm, sizeof(int), MSG_WAITALL) < 0){
         printf("Router %d: could not receive ready signal from manager to make routing table.\n", me.node_num);
         close(sockit);
         exit(1);
@@ -466,8 +473,24 @@ void send_packet(int master, int sockit){
             exit(1);
         }
         while(packet.dest != -1){
+            fflush(log_file);
             if(packet.dest == me.node_num){
                 mlog("Received packet from manager for me.");
+                fflush(log_file);
+
+                int confirma = 1;
+                if(send(sockit, &confirma, sizeof(int), 0)<0){
+                    printf("Router %d: Confirmation send failed.\n", me.node_num);
+                    close(sockit);
+                    exit(1);
+                }
+
+                if(recv(sockit, &packet, sizeof(packet), MSG_WAITALL) < 0){
+                    printf("Router %d: Child, packet sending, manager receive err (2).\n", me.node_num);
+                    close(sockit);
+                    exit(1);
+                }
+
                 continue;
             }
 
@@ -481,6 +504,13 @@ void send_packet(int master, int sockit){
 
             if (sendto(s, &packet, sizeof(packet), 0, (struct sockaddr *) &si_other, slen) == -1){
                 printf("Router %d: Child, packet sending. Send failed.\n", me.node_num);
+                exit(1);
+            }
+
+            int confirma = 1;
+            if(send(sockit, &confirma, sizeof(int), 0)<0){
+                printf("Router %d: Confirmation send failed.\n", me.node_num);
+                close(sockit);
                 exit(1);
             }
 
@@ -506,6 +536,17 @@ void send_packet(int master, int sockit){
             exit(1);
         }
 
+        int exists = 0;
+        for(int i = 0; i < confirm; i++){
+            if(confirmation[i].src == packet.src && confirmation[i].dest == packet.dest){
+                exists = 1;
+            }
+        }
+
+        if(!exists && packet.dest != -1){
+            continue;
+        }
+
         if(packet.dest == me.node_num){   //Packet is for me.
             sprintf(line, "Received packet from router %d.", packet.src);
             mlog(line);
@@ -518,7 +559,7 @@ void send_packet(int master, int sockit){
         else{
             si_other.sin_port = htons(udp_ports[rt.next_node[packet.dest]]);
 
-            sprintf(line, "Forwarding packet for router %d via router %d.", packet.dest, rt.next_node[packet.dest]);
+            sprintf(line, "Forwarding packet from router %d to router %d via router %d.", packet.src, packet.dest, rt.next_node[packet.dest]);
             mlog(line);
 
             if (sendto(master, &packet, sizeof(packet), 0, (struct sockaddr *) &si_other, slen) == -1){

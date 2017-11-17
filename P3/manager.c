@@ -23,10 +23,10 @@ void sighandler(int sig);
 void create_router(int router_number, int tcp_port, int udp_port);
 int tcp_to_router(int tcp_socket);
 void process_incoming_connection(int new_socket, int router_number);
-void all_routers_send(int* router_socket, char* message);
+void all_routers_send(int* router_socket);
 void select_routers(int* router_socket, struct sockaddr_in router, socklen_t size);
 void all_routers_send_int(int* router_socket);
-void send_packet_information();
+void send_packet_information(int* router_socket);
 
 //Class Variables
 struct links router_link[100];
@@ -61,7 +61,7 @@ int main(int argc, char* argv[]){
 
     //======== Checkpoint 7 ========
     mlog("Goodbye!\n");
-    printf("All done!\n"); 
+    printf("All done!\n");
     fclose(log_file);
 
 }
@@ -161,7 +161,7 @@ void serve(){
     all_routers_send_int(router_socket);
     select_routers(router_socket, router, size);
     mlog("All routers have sent edge topology information to neighbors.");
-    all_routers_send(router_socket, "Create forwarding table.");
+    all_routers_send(router_socket);
     select_routers(router_socket, router, size);
     mlog("All routers have created their routing table.");
 
@@ -169,7 +169,7 @@ void serve(){
     printf("Checkpoint 5 complete.\n");
     mlog("Manager is ready to begin sending individual packet information.");
     fflush(log_file);
-    send_packet_information();
+    send_packet_information(router_socket);
 }
 
 void select_routers(int* router_socket, struct sockaddr_in router, socklen_t size){
@@ -284,17 +284,23 @@ void process_incoming_connection(int new_socket, int router_number){
     }
 }
 
-void all_routers_send(int* router_socket, char* message){
+//TODO:
+void all_routers_send(int* router_socket){
     char line[100];
     int router_number;
     for(int i = 0; i < num_routers; i++){
-        if(send(router_socket[i], &message, sizeof(message), 0)<0){
+        if(send(router_socket[i], &packet, sizeof(packet), 0)<0){
+            printf("Send failed.");
+            close(router_socket[i]);
+            exit(1);
+        }
+        if(send(router_socket[i], &num_packets, sizeof(int), 0)<0){
             printf("Send failed.");
             close(router_socket[i]);
             exit(1);
         }
         router_number = tcp_to_router(router_socket[i]);
-        sprintf(line, "Manager to Router %d: %s", router_number, message);
+        sprintf(line, "Manager to Router %d: , Create forwarding table.", router_number);
         mlog(line);
     }
 }
@@ -319,28 +325,26 @@ void all_routers_send_int(int* router_socket){
 }
 
 //-------------------------- SENDING PACKET INFO -------------------------------
-void send_packet_information(){
-
+void send_packet_information(int* router_socket){
     for(int i = 0; i < num_packets; i++){
         int source = packet[i].src;
-        int source_socket = router_info[source].tcp_port;
-        if(send(source_socket, &packet[i], sizeof(packet), 0)<0){
+        if(send(router_info[source].tcp_port, &packet[i], sizeof(packet[i]), 0)<0){
             printf("Send failed.");
-            close(source_socket);
             exit(1);
         }
         char line[100];
-        sprintf(line, "Manager to Router %d: Send packet to router %d", source, packet[i].dest);
+        sprintf(line, "Manager to Router %d: Send packet to router %d", packet[i].src, packet[i].dest);
         mlog(line);
 
         int received;
-        if(recv(source_socket, &received, sizeof(int), MSG_WAITALL) < 0){
-          printf("Could not receive packet from last ss 3. Exiting program.\n");
-          close(source_socket);
+        if(recv(router_info[source].tcp_port, &received, sizeof(int), MSG_WAITALL) < 0){
+          printf("Could not receive packet from last router. Exiting program.\n");
+          close(router_socket[i]);
           exit(1);
         }
         sprintf(line, "Received confirmation from router %d.", source);
         mlog(line);
+        fflush(log_file);
     }
 
     //All packets have been sent.
@@ -414,7 +418,6 @@ void parse_file(char* filename){
     fflush(log_file);
     //Parse packet source/destination pairs.
     if(fscanf(fptr, "%d", &curr) == 0){ bad_file(fptr); }
-    int num_packets = 0;
 
     while(curr != -1){
         packet[num_packets].src = curr;
